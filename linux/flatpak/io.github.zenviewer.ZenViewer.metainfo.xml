@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>io.github.zenviewer.ZenViewer</id>
+  <name>ZenViewer</name>
+  <summary>A lightweight image viewer</summary>
+  <developer id="io.github.zenviewer">
+    <name>Ovidiu Albu</name>
+  </developer>
+  <metadata_license>MIT</metadata_license>
+  <project_license>MIT</project_license>
+  <description>
+    <p>
+      An image viewer with a media-player style interface: the image fills the
+      window, and all the controls are an on-screen display that hides by itself.
+    </p>
+    <ul>
+      <li>Thumbnail strip, info panel and an icon bar, each shown only when wanted</li>
+      <li>Slideshow with transitions, a chosen interval and looping</li>
+      <li>Zoom, full screen, and everything reachable from the keyboard</li>
+      <li>PNG, JPEG, GIF, WebP, TIFF, SVG, BMP, ICO and more</li>
+    </ul>
+  </description>
+  <launchable type="desktop-id">io.github.zenviewer.ZenViewer.desktop</launchable>
+  <content_rating type="oars-1.1"/>
+  <releases>
+    <release version="0.6.0" date="2026-11-13"/>
+  </releases>
+</component>

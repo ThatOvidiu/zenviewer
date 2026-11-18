@@ -1,0 +1,26 @@
+# Flatpak build of ZenViewer; see README.md here. build.sh runs it.
+id: io.github.zenviewer.ZenViewer
+runtime: org.kde.Platform # brings Qt 6, with qtsvg and qtimageformats
+runtime-version: '6.11'
+sdk: org.kde.Sdk
+command: zenviewer
+# Flatpak wants the menu entry and the icons named after the id
+rename-desktop-file: zenviewer.desktop
+rename-icon: zenviewer
+finish-args:
+  - --socket=wayland
+  - --socket=fallback-x11
+  - --share=ipc
+  # A viewer walks the folder of the image it was given and moves files to the
+  # trash, which the file-chooser portal (one file at a time) can't give it
+  - --filesystem=host
+modules:
+  - name: zenviewer
+    buildsystem: cmake-ninja
+    config-opts:
+      - -DCMAKE_BUILD_TYPE=Release
+    post-install:
+      - install -Dm644 linux/flatpak/io.github.zenviewer.ZenViewer.metainfo.xml -t /app/share/metainfo
+    sources:
+      - type: dir
+        path: build/src # the source, which build.sh unpacks there

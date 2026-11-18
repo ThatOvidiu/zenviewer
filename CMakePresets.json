@@ -1,0 +1,28 @@
+{
+    "version": 3,
+    "configurePresets": [
+        {
+            "name": "release",
+            "displayName": "Release (optimized, LTO)",
+            "generator": "Ninja",
+            "binaryDir": "${sourceDir}/linux/release/build",
+            "cacheVariables": { "CMAKE_BUILD_TYPE": "Release" }
+        },
+        {
+            "name": "windows",
+            "displayName": "Windows release (MSVC, LTO)",
+            "generator": "Ninja",
+            "binaryDir": "${sourceDir}/windows/build/scripts",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Release",
+                "CMAKE_CXX_COMPILER": "cl",
+                "CMAKE_INSTALL_PREFIX": "${sourceDir}/windows/build"
+            },
+            "condition": { "type": "equals", "lhs": "${hostSystemName}", "rhs": "Windows" }
+        }
+    ],
+    "buildPresets": [
+        { "name": "release", "configurePreset": "release" },
+        { "name": "windows", "configurePreset": "windows" }
+    ]
+}

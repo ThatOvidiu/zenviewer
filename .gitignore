@@ -1,0 +1,52 @@
+# Only source code and build scripts belong here: no build output, binaries or
+# packages. The icons in src/icons are sources (built into the app), so they stay.
+
+# What the builds produce
+build/
+linux/aur/src/
+linux/aur/pkg/
+CMakeCache.txt
+CMakeFiles/
+CMakeLists.txt.user
+compile_commands.json
+.cache/
+
+# Compiled code
+*.o
+*.obj
+*.a
+*.lib
+*.so
+*.so.*
+*.dll
+*.exe
+*.pdb
+*.ilk
+*.exp
+
+# Packages and archives (releases, the AUR's downloaded source, Windows zips)
+*.deb
+*.rpm
+*.pkg.tar
+*.pkg.tar.*
+*.flatpak
+*.AppImage
+*.snap
+*.msi
+*.zip
+*.7z
+*.tar
+*.tar.gz
+*.tgz
+*.tar.xz
+*.tar.zst
+*.tar.bz2
+
+# The .deb recipe stays local, out of the repo
+linux/deb/
+
+# Local sample images (large, personal)
+testpic/
+
+# The generated overview of the project layout
+/ZenViewer-project-structure.pdf
