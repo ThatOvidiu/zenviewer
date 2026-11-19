@@ -1,0 +1,20 @@
+name: ssh-test
+
+on:
+  workflow_dispatch:
+
+jobs:
+  ssh-test:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: SSH and touch /tmp/sshworks
+        env:
+          SSH_KEY: ${{ secrets.KEY_HOSTINGER }}
+          HOST: ${{ secrets.HOST_HOSTINGER }}
+          USER_NAME: ${{ secrets.USER_HOSTINGER }}
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/key
+          chmod 600 ~/.ssh/key
+          ssh -q -i ~/.ssh/key -o StrictHostKeyChecking=accept-new \
+              "$USER_NAME@$HOST" "touch /tmp/sshworks"
