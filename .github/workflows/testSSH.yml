@@ -6,6 +6,7 @@ on:
 jobs:
   ssh-test:
     runs-on: ubuntu-24.04
+    # environment: production   # uncomment if the secrets are environment secrets
     steps:
       - name: SSH and touch /tmp/sshworks
         env:
@@ -13,8 +14,25 @@ jobs:
           HOST: ${{ secrets.HOST_HOSTINGER }}
           USER_NAME: ${{ secrets.USER_HOSTINGER }}
         run: |
+          [ -n "$SSH_KEY" ]   && echo "key secret: set"  || echo "key secret: EMPTY"
+          [ -n "$HOST" ]      && echo "host secret: set" || echo "host secret: EMPTY"
+          [ -n "$USER_NAME" ] && echo "user secret: set" || echo "user secret: EMPTY"
+
           mkdir -p ~/.ssh
-          printf '%s\n' "$SSH_KEY" > ~/.ssh/key
+          printf '%s\n' "$SSH_KEY" | tr -d '\r' > ~/.ssh/key
           chmod 600 ~/.ssh/key
-          ssh -q -i ~/.ssh/key -o StrictHostKeyChecking=accept-new \
-              "$USER_NAME@$HOST" "touch /tmp/sshworks"
+          ssh-keygen -y -P "" -f ~/.ssh/key >/dev/null 2>&1 \
+            && echo "key: valid, no passphrase" \
+            || echo "key: INVALID or has a passphrase"
+
+          for p in 22 65002; do
+            timeout 5 bash -c "</dev/tcp/$HOST/$p" 2>/dev/null \
+              && echo "port $p: open" || echo "port $p: closed"
+          done
+
+          PORT=65002   # change to 22 if only 22 shows open
+          ssh -i ~/.ssh/key -p "$PORT" -o BatchMode=yes \
+              -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 \
+              "$USER_NAME@$HOST" "touch /tmp/sshworks" 2>&1 \
+            | sed "s/$HOST/<host>/g; s/$USER_NAME/<user>/g"
+          exit ${PIPESTATUS[0]}
