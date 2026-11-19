@@ -25,12 +25,9 @@ jobs:
             && echo "key: valid, no passphrase" \
             || echo "key: INVALID or has a passphrase"
 
-          for p in 22 65002; do
-            timeout 5 bash -c "</dev/tcp/$HOST/$p" 2>/dev/null \
-              && echo "port $p: open" || echo "port $p: closed"
-          done
+          
 
-          PORT=65002   # change to 22 if only 22 shows open
+          PORT=22   # change to 22 if only 22 shows open
           ssh -i ~/.ssh/key -p "$PORT" -o BatchMode=yes \
               -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 \
               "$USER_NAME@$HOST" "touch /tmp/sshworks" 2>&1 \
