@@ -3,7 +3,7 @@
 A lightweight image viewer with a media-player style interface: the image
 fills the window and all controls are an auto-hiding on-screen display (OSD).
 Built on Qt 6 Widgets with custom-painted vector icons, so it looks the same
-on Linux, Windows and macOS. File dialogs stay native.
+on Linux and Windows. File dialogs stay native.
 
 ## Project layout
 
