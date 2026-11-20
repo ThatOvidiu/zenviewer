@@ -1,6 +1,7 @@
 #include "OsdIcons.h"
 
 #include <QElapsedTimer>
+#include <QPixmap>
 #include <QPainter>
 #include <QPainterPath>
 
@@ -179,6 +180,24 @@ void drawShape(QPainter &p, OsdIcon icon, const QColor &color)
         p.drawEllipse(QPointF(12, 12.5), 3.6, 3.6);
         break;
     }
+    case OsdIcon::Print: {
+        // The paper going in at the top, the body, the printed sheet coming out
+        p.drawPolyline(QPolygonF({{7, 8}, {7, 3.5}, {17, 3.5}, {17, 8}}));
+        QPainterPath body;
+        body.moveTo(6.5, 17);
+        body.lineTo(5, 17);
+        body.arcTo(QRectF(3, 13, 4, 4), 270, -90);
+        body.lineTo(3, 10);
+        body.arcTo(QRectF(3, 8, 4, 4), 180, -90);
+        body.lineTo(19, 8);
+        body.arcTo(QRectF(17, 8, 4, 4), 90, -90);
+        body.lineTo(21, 15);
+        body.arcTo(QRectF(17, 13, 4, 4), 0, -90);
+        body.lineTo(17.5, 17);
+        p.drawPath(body);
+        p.drawRect(QRectF(7, 13.5, 10, 7));
+        break;
+    }
     case OsdIcon::Mouse:
         p.drawRoundedRect(QRectF(7, 3.5, 10, 17), 5, 5);
         p.drawLine(QPointF(12, 3.5), QPointF(12, 9));
@@ -227,4 +246,24 @@ void drawLoadingSpinner(QPainter &painter, const QPointF &center, qreal radius)
     painter.setPen(QPen(QBrush(comet), lineWidth));
     painter.drawEllipse(center, radius, radius);
     painter.restore();
+}
+
+QIcon osdIconSet(OsdIcon icon)
+{
+    QIcon set;
+    if (icon == OsdIcon::None)
+        return set;
+    for (const int size : {16, 20, 24, 32, 40, 48}) {
+        for (const auto &[mode, color] : {std::pair{QIcon::Normal, QColor(255, 255, 255)},
+                                          std::pair{QIcon::Disabled, QColor(255, 255, 255, 70)}}) {
+            QPixmap pixmap(size, size);
+            pixmap.fill(Qt::transparent);
+            QPainter p(&pixmap);
+            p.setRenderHint(QPainter::Antialiasing);
+            drawOsdIcon(p, icon, QRectF(0, 0, size, size), color);
+            p.end();
+            set.addPixmap(pixmap, mode);
+        }
+    }
+    return set;
 }

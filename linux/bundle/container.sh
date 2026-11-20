@@ -18,7 +18,7 @@ apt-get update -qq
 apt-get install -qq -y --no-install-recommends >/dev/null \
     ca-certificates wget xz-utils build-essential g++-12 ninja-build perl python3 python3-pip pkg-config patchelf \
     libfontconfig1-dev libfreetype-dev libxkbcommon-dev libxkbcommon-x11-dev libwayland-dev wayland-protocols \
-    libx11-dev libx11-xcb-dev libxcb1-dev libxcb-cursor-dev libxcb-icccm4-dev libxcb-image0-dev \
+    libcups2-dev libx11-dev libx11-xcb-dev libxcb1-dev libxcb-cursor-dev libxcb-icccm4-dev libxcb-image0-dev \
     libxcb-keysyms1-dev libxcb-randr0-dev libxcb-render0-dev libxcb-render-util0-dev libxcb-shape0-dev \
     libxcb-shm0-dev libxcb-sync-dev libxcb-util-dev libxcb-xfixes0-dev libxcb-xkb-dev libxcb-xinput-dev
 # Qt 6.12 needs CMake 3.25, newer than Ubuntu 22.04's; GCC 12 is the newest that
@@ -37,25 +37,29 @@ fetch() {
 
 # Qt, with everything ZenViewer doesn't use turned off. Image and text libraries
 # are Qt's own copies, so the bundle doesn't depend on the system's versions;
-# fontconfig and FreeType come from the system, to match its font setup.
-if [ ! -f /w/stamp/qtbase ]; then
+# fontconfig and FreeType come from the system, to match its font setup, and so
+# does CUPS, for printing. The stamp holds the options: change them and qtbase,
+# and the modules built on it, are built again.
+qtbase_options="-release -prefix /w/qt -nomake examples -nomake tests \
+    -no-dbus -no-icu -no-glib -no-openssl -no-opengl \
+    -no-feature-journald -no-feature-sql -no-feature-testlib -no-feature-concurrent \
+    -no-feature-sessionmanager -no-feature-vulkan -no-feature-libinput -no-feature-tslib \
+    -no-feature-mtdev -no-feature-libudev -no-feature-linuxfb -no-feature-vnc -no-feature-eglfs \
+    -no-feature-network -no-feature-xml -no-zstd \
+    -fontconfig -system-freetype -qt-harfbuzz -qt-libpng -qt-libjpeg -qt-pcre -qt-zlib -qt-doubleconversion \
+    -cups -xcb -bundled-xcb-xinput -feature-wayland"
+if [ "$(cat /w/stamp/qtbase 2>/dev/null)" != "$qtbase_options" ]; then
+    rm -f /w/stamp/qtsvg /w/stamp/qtimageformats
     echo "== qtbase (the long part)"
     fetch $qt_url/qtbase-everywhere-src-$qt.tar.xz
     rm -rf /tmp/b/qtbase /tmp/b/qtbase-everywhere-src-$qt /w/qt
     mkdir /tmp/b/qtbase
     tar xf /w/src/qtbase-everywhere-src-$qt.tar.xz -C /tmp/b
     (cd /tmp/b/qtbase &&
-        ../qtbase-everywhere-src-$qt/configure -release -prefix /w/qt -nomake examples -nomake tests \
-            -no-dbus -no-icu -no-glib -no-openssl -no-opengl \
-            -no-feature-journald -no-feature-sql -no-feature-printsupport -no-feature-testlib -no-feature-concurrent \
-            -no-feature-sessionmanager -no-feature-vulkan -no-feature-cups -no-feature-libinput -no-feature-tslib \
-            -no-feature-mtdev -no-feature-libudev -no-feature-linuxfb -no-feature-vnc -no-feature-eglfs \
-            -no-feature-network -no-feature-xml -no-zstd \
-            -fontconfig -system-freetype -qt-harfbuzz -qt-libpng -qt-libjpeg -qt-pcre -qt-zlib -qt-doubleconversion \
-            -xcb -bundled-xcb-xinput -feature-wayland &&
+        ../qtbase-everywhere-src-$qt/configure $qtbase_options &&
         cmake --build . --parallel "$jobs" &&
         cmake --install .) >/w/logs/qtbase.log 2>&1 || fail qtbase qtbase
-    touch /w/stamp/qtbase
+    echo "$qtbase_options" >/w/stamp/qtbase
 fi
 qt_module() { # name, options
     [ -f "/w/stamp/$1" ] && return 0
@@ -100,6 +104,7 @@ system_lib() {
         libstdc++.so*|libgcc_s.so*| \
         libX11.so*|libX11-xcb.so*|libxcb.so.1|libXau.so*|libXdmcp.so*|libXext.so*|libXrender.so*| \
         libwayland-*|libxkbcommon*|libGL*|libEGL*|libOpenGL*|libdrm.so*|libgbm.so*| \
+        libcups.so*| \
         libfontconfig.so*|libfreetype.so*|libexpat.so*|libz.so*|libpng16.so*|libbrotli*|libbz2.so*| \
         libffi.so*|libbsd.so*|libmd.so*|libuuid.so*) return 0 ;;
     esac

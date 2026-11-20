@@ -101,9 +101,11 @@ The essentials:
 | Ctrl+Wheel, + / − | Zoom |
 | Double-click, F | Full screen |
 | Middle-click | Fit / actual size |
+| Right-click, Menu key | A menu with every command and its key. Its File menu copies, moves or deletes the image, and the raw file shot with it (same name, a camera raw extension such as NEF, CR3, ARW or DNG): the image, both, or the raw alone |
 | 0, 1 | Fit; actual size (1 again fits) |
 | Delete ×2 | Move to trash |
 | E | EXIF details: camera, lens, exposure, date and place, where the image has them (← / → move to the other images with it open; E, Esc or Enter closes it) |
+| Ctrl+P | Print: a print preview, from which the image goes to a printer or into a PDF file |
 | I, T, M | Info panel (leaves the controls alone; in a window, it and the title shrink with the image), thumbnail strip on / off, show / hide the icon bar for now (the left edge always brings it back) |
 | L | Loop: the last image leads to the first and back |
 | ↑ / ↓, Enter | Select an icon in the bar, press it (Esc leaves the bar) |

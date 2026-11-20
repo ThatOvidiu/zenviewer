@@ -7,8 +7,9 @@ contains software by others, listed below with the licences it comes under.
 Qt
 --
 ZenViewer uses the Qt Toolkit, version 6.12.0 (Qt6Core.dll, Qt6Gui.dll,
-Qt6Widgets.dll, Qt6Svg.dll and the plugins in the platforms, styles,
-imageformats and iconengines folders, all in the dll folder).
+Qt6Widgets.dll, Qt6PrintSupport.dll, Qt6Svg.dll and the plugins in the
+platforms, styles, imageformats and iconengines folders, all in the dll
+folder).
 Copyright (C) The Qt Company Ltd. and other contributors.
 
 Qt is used under the GNU Lesser General Public License version 3
