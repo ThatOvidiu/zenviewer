@@ -1,10 +1,9 @@
 #include "ImageOrientation.h"
 
-#include <QFile>
+#include "ExifInfo.h"
+
 #include <QImageReader>
 #include <QtEndian>
-
-#include <cstring>
 
 namespace {
 // Orientation tag (0x0112) of IFD0 in a TIFF-structured EXIF block, or 0
@@ -38,28 +37,6 @@ int exifOrientation(QByteArray exif)
     return 0;
 }
 
-// Walks the RIFF chunks of a WebP file looking for its EXIF chunk
-int webpOrientation(const QString &path)
-{
-    QFile file(path);
-    if (!file.open(QIODevice::ReadOnly))
-        return 0;
-    char header[12];
-    if (file.read(header, 12) != 12 || memcmp(header, "RIFF", 4) != 0 || memcmp(header + 8, "WEBP", 4) != 0)
-        return 0;
-    while (true) {
-        char chunk[8]; // fourcc + little-endian size
-        if (file.read(chunk, 8) != 8)
-            return 0;
-        const quint32 size = qFromLittleEndian<quint32>(chunk + 4);
-        if (memcmp(chunk, "EXIF", 4) == 0)
-            return size <= 1024 * 1024 ? exifOrientation(file.read(size)) : 0;
-        // Chunks are padded to an even size
-        if (!file.seek(file.pos() + size + (size & 1)))
-            return 0;
-    }
-}
-
 QImageIOHandler::Transformations fromExif(int orientation)
 {
     using T = QImageIOHandler::Transformation;
@@ -80,7 +57,7 @@ QImageIOHandler::Transformations missingTransformation(QImageReader &reader)
 {
     if (reader.supportsOption(QImageIOHandler::ImageTransformation) || reader.format() != "webp")
         return QImageIOHandler::TransformationNone;
-    return fromExif(webpOrientation(reader.fileName()));
+    return fromExif(exifOrientation(readExifBlock(reader.fileName())));
 }
 
 QImage applyTransformation(const QImage &image, QImageIOHandler::Transformations transformation)

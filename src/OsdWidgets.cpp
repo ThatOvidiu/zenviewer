@@ -1879,7 +1879,250 @@ void SettingsOverlay::paintEvent(QPaintEvent *)
     p.drawText(QRectF(layout.panel.left(), layout.panel.bottom() - SettingsFooterHeight * s, layout.panel.width(), SettingsFooterHeight * s),
                Qt::AlignCenter, tr("↑ ↓ ← →  choose   ·   Enter  set   ·   S / Esc  close"));
 }
+// -------------------------------------------------------------- ExifOverlay
 
+namespace {
+constexpr qreal ExifHeaderHeight = 34; // the file name, above the groups
+constexpr qreal ExifRowHeight = 34;
+constexpr qreal ExifLabelGap = 20;    // between a label and its value
+constexpr qreal ExifValueWidth = 440; // longer values are cut short
+constexpr qreal ExifGroupGap = 22;    // between rows of groups
+constexpr qreal ExifMinContentWidth = 320;
+constexpr qreal ExifTextSlack = 1.06;
+}
+
+ExifOverlay::ExifOverlay(QWidget *parent)
+    : QWidget(parent)
+{
+    setFocusPolicy(Qt::StrongFocus);
+    setMouseTracking(true);
+    hide();
+}
+
+void ExifOverlay::setContent(const QString &fileName, const QList<ExifSection> &sections)
+{
+    m_fileName = fileName;
+    m_sections = sections;
+    update();
+}
+
+void ExifOverlay::open()
+{
+    m_wheel = 0;
+    show();
+    raise();
+    setFocus(Qt::OtherFocusReason);
+}
+
+void ExifOverlay::close()
+{
+    hide();
+    emit closed();
+}
+
+QList<ExifSection> ExifOverlay::shownSections() const
+{
+    if (!m_sections.isEmpty())
+        return m_sections;
+    return {{tr("No EXIF details"), {}}};
+}
+
+ExifOverlay::Layout ExifOverlay::computeLayout() const
+{
+    const QFontMetricsF titleMetrics(infoTitleFont(font(), 1.0));
+    const QFontMetricsF lineMetrics(infoLineFont(font(), 1.0));
+    const QList<ExifSection> sections = shownSections();
+
+    // Each group's size at nominal scale, in the info panel's type
+    Layout layout;
+    QList<QSizeF> sizes;
+    for (const ExifSection &section : sections) {
+        qreal label = 0, value = 0;
+        for (const auto &[name, text] : section.rows) {
+            label = qMax(label, lineMetrics.horizontalAdvance(name));
+            value = qMax(value, qMin(ExifValueWidth, lineMetrics.horizontalAdvance(text)));
+        }
+        // Small type is hinted relatively wider than at full size: some slack keeps it uncut
+        label *= ExifTextSlack;
+        value *= ExifTextSlack;
+        layout.labelWidths << label;
+        const qreal width = qMax(titleMetrics.horizontalAdvance(section.title) + 2,
+                                 section.rows.isEmpty() ? 0.0 : label + ExifLabelGap + value + 4);
+        sizes << QSizeF(width, InfoTitleHeight + SettingsTitleGap + section.rows.size() * ExifRowHeight);
+    }
+    const qreal headerWidth = qMin(lineMetrics.horizontalAdvance(m_fileName) + 4, 2 * ExifValueWidth);
+
+    // All the groups side by side, or fewer per row: whichever lets the panel be largest.
+    // Of those that are equally large, the one with rows most evenly filled (2 + 2, not 3 + 1).
+    const auto n = int(sections.size());
+    int perRow = n;
+    qreal bestScale = -1, bestWidth = 0, bestHeight = 0;
+    int bestGaps = 0;
+    for (int columns = n; columns >= 1; --columns) {
+        QList<qreal> widths(columns, 0.0);
+        QList<qreal> heights((n + columns - 1) / columns, 0.0);
+        for (int i = 0; i < n; ++i) {
+            widths[i % columns] = qMax(widths[i % columns], sizes[i].width());
+            heights[i / columns] = qMax(heights[i / columns], sizes[i].height());
+        }
+        qreal content = (columns - 1) * SettingsColumnGap, rows = (heights.size() - 1) * ExifGroupGap;
+        for (qreal w : std::as_const(widths))
+            content += w;
+        for (qreal h : std::as_const(heights))
+            rows += h;
+        const qreal width = 2 * InfoPadding + qMax(qMax(content, headerWidth), ExifMinContentWidth);
+        const qreal height = 2 * InfoPaddingY + ExifHeaderHeight + rows + SettingsDoneGap + SettingsDoneHeight + SettingsFooterHeight;
+        // Smaller than the rest of the display only if the window can't hold it
+        const qreal scale = qMin(osdScale(this), qMin((this->width() - 2 * SettingsMargin) / width,
+                                                      (this->height() - 2 * SettingsMargin) / height));
+        const int gaps = int(heights.size()) * columns - n; // empty places in the last row
+        if (scale > bestScale + 1e-6 || (scale > bestScale - 1e-6 && gaps < bestGaps)) {
+            bestScale = scale;
+            bestGaps = gaps;
+            perRow = columns;
+            bestWidth = width;
+            bestHeight = height;
+        }
+    }
+
+    const qreal s = layout.scale = qMax(0.05, bestScale);
+    layout.panel = QRectF(0, 0, bestWidth * s, bestHeight * s);
+    layout.panel.moveCenter(QRectF(rect()).center());
+    const qreal left = layout.panel.left() + InfoPadding * s;
+    const qreal innerWidth = layout.panel.width() - 2 * InfoPadding * s;
+    layout.header = QRectF(left, layout.panel.top() + InfoPaddingY * s, innerWidth, ExifHeaderHeight * s);
+
+    QList<qreal> widths(perRow, 0.0);
+    QList<qreal> heights((n + perRow - 1) / perRow, 0.0);
+    for (int i = 0; i < n; ++i) {
+        widths[i % perRow] = qMax(widths[i % perRow], sizes[i].width());
+        heights[i / perRow] = qMax(heights[i / perRow], sizes[i].height());
+    }
+    qreal y = layout.header.bottom();
+    for (int row = 0; row < heights.size(); ++row) {
+        qreal x = left;
+        for (int column = 0; column < perRow && row * perRow + column < n; ++column) {
+            layout.groups << QRectF(x, y, widths[column] * s, heights[row] * s);
+            x += (widths[column] + SettingsColumnGap) * s;
+        }
+        y += (heights[row] + ExifGroupGap) * s;
+    }
+    y -= ExifGroupGap * s;
+    layout.done = QRectF(left, y + SettingsDoneGap * s, innerWidth, SettingsDoneHeight * s);
+    return layout;
+}
+
+bool ExifOverlay::event(QEvent *event)
+{
+    // Claim every key so window shortcuts (E, arrows, Enter, ...) don't fire
+    if (event->type() == QEvent::ShortcutOverride) {
+        event->accept();
+        return true;
+    }
+    return QWidget::event(event);
+}
+
+bool ExifOverlay::focusNextPrevChild(bool)
+{
+    return false; // nothing to move between
+}
+
+void ExifOverlay::keyPressEvent(QKeyEvent *event)
+{
+    switch (event->key()) {
+    case Qt::Key_Left:
+    case Qt::Key_PageUp:
+        emit navigateRequested(-1);
+        break;
+    case Qt::Key_Right:
+    case Qt::Key_PageDown:
+        emit navigateRequested(+1);
+        break;
+    case Qt::Key_E:
+    case Qt::Key_Escape:
+    case Qt::Key_Return:
+    case Qt::Key_Enter:
+    case Qt::Key_Space:
+        close();
+        break;
+    default:
+        break;
+    }
+}
+
+void ExifOverlay::mouseMoveEvent(QMouseEvent *event)
+{
+    setCursor(computeLayout().done.contains(event->position()) ? Qt::PointingHandCursor : Qt::ArrowCursor);
+}
+
+void ExifOverlay::mouseReleaseEvent(QMouseEvent *event)
+{
+    if (event->button() != Qt::LeftButton)
+        return;
+    const Layout layout = computeLayout();
+    if (layout.done.contains(event->position()) || !layout.panel.contains(event->position()))
+        close();
+}
+
+void ExifOverlay::wheelEvent(QWheelEvent *event)
+{
+    // Like the wheel over the image: one notch, one picture
+    m_wheel += event->angleDelta().y();
+    if (qAbs(m_wheel) >= 120) {
+        emit navigateRequested(m_wheel > 0 ? -1 : 1);
+        m_wheel = 0;
+    }
+    event->accept();
+}
+
+void ExifOverlay::paintEvent(QPaintEvent *)
+{
+    const Layout layout = computeLayout();
+    const qreal s = layout.scale;
+    const QList<ExifSection> sections = shownSections();
+    QPainter p(this);
+    p.setRenderHint(QPainter::Antialiasing);
+    p.setPen(Qt::NoPen);
+    p.setBrush(BackdropColor);
+    p.drawRoundedRect(layout.panel, 14 * s, 14 * s);
+
+    p.setFont(infoLineFont(font(), s));
+    drawShadowedText(p, layout.header,
+                     p.fontMetrics().elidedText(m_fileName, Qt::ElideMiddle, int(layout.header.width())), DimTextColor);
+
+    for (int g = 0; g < sections.size() && g < layout.groups.size(); ++g) {
+        const ExifSection &section = sections[g];
+        const QRectF group = layout.groups[g];
+        p.setFont(infoTitleFont(font(), s));
+        drawShadowedText(p, QRectF(group.left(), group.top(), group.width(), InfoTitleHeight * s),
+                         p.fontMetrics().elidedText(section.title, Qt::ElideRight, int(group.width())), TextColor);
+
+        p.setFont(infoLineFont(font(), s));
+        const qreal label = layout.labelWidths[g] * s;
+        const qreal valueLeft = group.left() + label + ExifLabelGap * s;
+        qreal y = group.top() + (InfoTitleHeight + SettingsTitleGap) * s;
+        for (const auto &[name, text] : section.rows) {
+            const qreal rowHeight = ExifRowHeight * s;
+            drawShadowedText(p, QRectF(group.left(), y, label + 2, rowHeight), name, DimTextColor);
+            const QRectF value(valueLeft, y, group.right() - valueLeft, rowHeight);
+            drawShadowedText(p, value, p.fontMetrics().elidedText(text, Qt::ElideRight, int(value.width())), TextColor);
+            y += rowHeight;
+        }
+    }
+
+    // Done is the only control, so it is always the selected one
+    p.setPen(Qt::NoPen);
+    p.setBrush(TextColor);
+    p.drawRoundedRect(layout.done, layout.done.height() / 2, layout.done.height() / 2);
+    p.setFont(pixelFont(font(), qMax(1, qRound(24 * s)), QFont::DemiBold));
+    p.setPen(QColor(18, 18, 20));
+    p.drawText(layout.done, Qt::AlignCenter, tr("Done"));
+
+    p.setFont(pixelFont(font(), qMax(1, qRound(15 * s))));
+    p.setPen(DimTextColor);
+    p.drawText(QRectF(layout.panel.left(), layout.panel.bottom() - SettingsFooterHeight * s, layout.panel.width(), SettingsFooterHeight * s),
+               Qt::AlignCenter, tr("← →  previous / next image   ·   E / Esc  close"));
+}
 
 // ------------------------------------------------------------- AboutOverlay
 

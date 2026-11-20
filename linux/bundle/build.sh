@@ -10,7 +10,7 @@ cd "$root"
 # in the project folder (sample images, installers, .git) stays out.
 archive() {
     tar -C "$root" --exclude='./linux/*/build' --exclude=./windows/build -cf - \
-        ./CMakeLists.txt ./CMakePresets.json ./LICENSE ./README.md ./src ./linux ./windows
+        ./CMakeLists.txt ./CMakePresets.json ./LICENSE ./README.md ./src ./third_party ./linux ./windows
 }
 if command -v podman >/dev/null; then
     engine=podman

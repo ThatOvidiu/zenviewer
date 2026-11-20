@@ -10,6 +10,7 @@ class AboutOverlay;
 class ConfirmOverlay;
 class ControlBar;
 class EmptyHint;
+class ExifOverlay;
 class ActionFlash;
 class Filmstrip;
 class HelpOverlay;
@@ -65,6 +66,8 @@ private:
     void toast(const QString &text, OsdIcon icon = OsdIcon::None, int durationMs = 1200);
     void setHelpVisible(bool visible);
     void setAboutVisible(bool visible);
+    void showExif();
+    void updateExif();
     void confirmQuit();
 
     void loadFolder(const QString &dir, const QString &selectFile);
@@ -109,6 +112,7 @@ private:
     ConfirmOverlay *m_confirm = nullptr;
     OpenOverlay *m_open = nullptr;
     SettingsOverlay *m_settings = nullptr;
+    ExifOverlay *m_exif = nullptr;
     LoadingSpinner *m_spinner = nullptr;
     ActionFlash *m_flash = nullptr;
     EmptyHint *m_emptyHint = nullptr;
@@ -138,6 +142,7 @@ private:
     QAction *m_pauseAct = nullptr;
     QAction *m_slideshowAct = nullptr;
     QAction *m_infoAct = nullptr;
+    QAction *m_exifAct = nullptr;
     QAction *m_aboutAct = nullptr;
     QAction *m_filmstripAct = nullptr;
     QAction *m_loopAct = nullptr;

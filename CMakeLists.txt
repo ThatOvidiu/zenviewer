@@ -19,6 +19,7 @@ qt_add_executable(zenviewer
     src/ImageView.h src/ImageView.cpp
     src/ImageLoader.h src/ImageLoader.cpp
     src/ImageOrientation.h src/ImageOrientation.cpp
+    src/ExifInfo.h src/ExifInfo.cpp
     src/Filmstrip.h src/Filmstrip.cpp
     src/TransitionOverlay.h src/TransitionOverlay.cpp
     src/OsdIcons.h src/OsdIcons.cpp
@@ -26,6 +27,13 @@ qt_add_executable(zenviewer
 )
 
 target_link_libraries(zenviewer PRIVATE Qt6::Widgets)
+
+# TinyEXIF reads the EXIF details (third_party/TinyEXIF/README.md). It is built
+# into the app, without its XMP parser, which would need tinyxml2.
+target_sources(zenviewer PRIVATE third_party/TinyEXIF/TinyEXIF.h third_party/TinyEXIF/TinyEXIF.cpp)
+target_include_directories(zenviewer PRIVATE third_party/TinyEXIF)
+target_compile_definitions(zenviewer PRIVATE TINYEXIF_NO_XMP_SUPPORT)
+
 # The version and the details above live only here; the code gets them from here
 target_compile_definitions(zenviewer PRIVATE
     ZENVIEWER_VERSION="${PROJECT_VERSION}"
@@ -41,6 +49,8 @@ qt_add_resources(zenviewer "icons" PREFIX "/" BASE src FILES
 
 if(NOT MSVC)
     target_compile_options(zenviewer PRIVATE -Wall -Wextra -Wpedantic)
+    # Someone else's code: its warnings are theirs to fix
+    set_source_files_properties(third_party/TinyEXIF/TinyEXIF.cpp PROPERTIES COMPILE_OPTIONS -w)
 endif()
 
 option(ZENVIEWER_LTO "Link-time optimization in optimized builds" ON)

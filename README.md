@@ -10,6 +10,7 @@ on Linux and Windows. File dialogs stay native.
 | Path | What it is |
 |---|---|
 | `src/` | The app's code, the same on every platform |
+| `third_party/` | Others' code built into the app: [TinyEXIF](third_party/TinyEXIF/README.md), which reads the EXIF details |
 | `CMakeLists.txt`, `CMakePresets.json` | The build, shared by all platforms; it includes the platform's own `.cmake` file |
 | `linux/` | Linux: `linux.cmake` and the `.desktop` file, shared by its three builds: `release/` (the CMake preset, against the system's Qt), `bundle/` (a folder with its own Qt, to hand out) and `flatpak/` (a Flatpak, on the KDE runtime's Qt). Each keeps what it produces in its own `build/` |
 | `windows/` | Windows: `windows.cmake`, `build.bat`, `installer.bat` + `installer.iss`, `notices/` with the licences that ship with the app, and `build/` for what the Windows build produces |
@@ -102,14 +103,18 @@ The essentials:
 | Middle-click | Fit / actual size |
 | 0, 1 | Fit; actual size (1 again fits) |
 | Delete ×2 | Move to trash |
+| E | EXIF details: camera, lens, exposure, date and place, where the image has them (← / → move to the other images with it open; E, Esc or Enter closes it) |
 | I, T, M | Info panel (leaves the controls alone; in a window, it and the title shrink with the image), thumbnail strip on / off, show / hide the icon bar for now (the left edge always brings it back) |
 | L | Loop: the last image leads to the first and back |
 | ↑ / ↓, Enter | Select an icon in the bar, press it (Esc leaves the bar) |
 | Q, X | Quit, after a Yes / No confirmation (default No) |
 
+EXIF details come from JPEG, PNG, WebP and TIFF files.
+
 ## License
 
 ZenViewer's own code is under the [MIT License](LICENSE). It uses
-[Qt](https://www.qt.io/), which is under the LGPL. The Linux bundle and the
+[Qt](https://www.qt.io/), which is under the LGPL, and includes
+[TinyEXIF](https://github.com/cdcseacave/TinyEXIF) (MIT, with parts under BSD-2-Clause). The Linux bundle and the
 Windows package contain Qt, so they carry its licence and the notices for the
 software inside it; see [`linux/bundle`](linux/bundle/README.md#good-to-know).

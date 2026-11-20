@@ -160,6 +160,25 @@ void drawShape(QPainter &p, OsdIcon icon, const QColor &color)
             p.drawPoint(QPointF(x, 10));
         p.drawLine(QPointF(8, 14), QPointF(16, 14));
         break;
+    case OsdIcon::Camera: {
+        // Body with the viewfinder bump on top, and the lens
+        QPainterPath body;
+        body.moveTo(3, 9);
+        body.arcTo(QRectF(3, 7, 4, 4), 180, -90);
+        body.lineTo(7.5, 7);
+        body.lineTo(9.2, 4.5);
+        body.lineTo(14.8, 4.5);
+        body.lineTo(16.5, 7);
+        body.arcTo(QRectF(17, 7, 4, 4), 90, -90);
+        body.lineTo(21, 17.5);
+        body.arcTo(QRectF(17, 15.5, 4, 4), 0, -90);
+        body.lineTo(5, 19.5);
+        body.arcTo(QRectF(3, 15.5, 4, 4), 270, -90);
+        body.closeSubpath();
+        p.drawPath(body);
+        p.drawEllipse(QPointF(12, 12.5), 3.6, 3.6);
+        break;
+    }
     case OsdIcon::Mouse:
         p.drawRoundedRect(QRectF(7, 3.5, 10, 17), 5, 5);
         p.drawLine(QPointF(12, 3.5), QPointF(12, 9));

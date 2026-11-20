@@ -7,7 +7,7 @@
     <name>Ovidiu Albu</name>
   </developer>
   <metadata_license>MIT</metadata_license>
-  <project_license>MIT</project_license>
+  <project_license>MIT AND BSD-2-Clause</project_license>
   <description>
     <p>
       An image viewer with a media-player style interface: the image fills the

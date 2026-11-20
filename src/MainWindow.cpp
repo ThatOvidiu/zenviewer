@@ -1,5 +1,6 @@
 #include "MainWindow.h"
 
+#include "ExifInfo.h"
 #include "Filmstrip.h"
 #include "ImageLoader.h"
 #include "ImageView.h"
@@ -243,9 +244,11 @@ void MainWindow::createActions()
         help(add(tr("Fit to window"), {Qt::Key_0}, [this] { m_view->fitToWindow(); }), OsdIcon::FitWindow),
         help(add(tr("Actual size / fit"), {Qt::Key_1}, [this] { m_view->toggleActualSize(); }), OsdIcon::ActualSize),
         add(tr("Trash (press twice)"), {QKeySequence::Delete}, [this] { deleteCurrent(); }),
+        help(add(tr("EXIF details"), {Qt::Key_E}, [this] { showExif(); }), OsdIcon::Camera),
     };
     QAction *zoomInAct = m_imageActions[0], *zoomOutAct = m_imageActions[1], *fitAct = m_imageActions[2],
             *actualAct = m_imageActions[3];
+    m_exifAct = m_imageActions[5];
 
     m_infoAct = help(add(tr("Info panel"), {Qt::Key_I}, [] {}), OsdIcon::Info);
     m_infoAct->setCheckable(true);
@@ -327,6 +330,7 @@ void MainWindow::createActions()
     m_controlBar->addButton(fitAct, OsdIcon::FitWindow);
     m_controlBar->addSeparator();
     m_controlBar->addButton(m_infoAct, OsdIcon::Info);
+    m_controlBar->addButton(m_exifAct, OsdIcon::Camera);
     m_controlBar->addButton(m_fullScreenAct, OsdIcon::Fullscreen);
     m_controlBar->addButton(settingsAct, OsdIcon::Settings);
     m_controlBar->addButton(m_filmstripAct, OsdIcon::Filmstrip);
@@ -391,6 +395,17 @@ void MainWindow::createOsd()
             setSlideEffect(TransitionOverlay::Effect(value));
     });
     connect(m_settings, &SettingsOverlay::closed, this, [this] {
+        m_view->setFocus();
+        showOsd(); // restart the hide timer
+    });
+
+    m_exif = new ExifOverlay(m_view);
+    connect(m_exif, &ExifOverlay::navigateRequested, this, [this](int step) {
+        m_stripKeyTimer->start(); // same as the left / right keys
+        navigate(step);
+        updatePanels();
+    });
+    connect(m_exif, &ExifOverlay::closed, this, [this] {
         m_view->setFocus();
         showOsd(); // restart the hide timer
     });
@@ -513,6 +528,7 @@ void MainWindow::layoutOsd()
     m_help->setReservedLeft(0); // the icon bar hides while the help is up
     m_open->setGeometry(r);
     m_settings->setGeometry(r);
+    m_exif->setGeometry(r);
     m_confirm->setGeometry(r);
 }
 
@@ -532,7 +548,7 @@ void MainWindow::hideOsd(bool force)
     if (!m_view->hasImage())
         return; // keep the controls up while there is nothing to look at
     if (!force && (osdHovered() || cardOpen() || m_confirm->isVisible() || m_open->isVisible()
-                   || m_settings->isVisible())) {
+                   || m_settings->isVisible() || m_exif->isVisible())) {
         m_osdHideTimer->start();
         return;
     }
@@ -607,7 +623,7 @@ void MainWindow::setAboutVisible(bool visible)
 
 bool MainWindow::overlayOpen() const
 {
-    return m_open->isVisible() || m_settings->isVisible() || m_confirm->isVisible();
+    return m_open->isVisible() || m_settings->isVisible() || m_exif->isVisible() || m_confirm->isVisible();
 }
 
 bool MainWindow::osdHovered() const
@@ -644,6 +660,30 @@ void MainWindow::setHelpVisible(bool visible)
         showOsd();
     }
     updatePanels();
+}
+
+void MainWindow::showExif()
+{
+    setHelpVisible(false);
+    setAboutVisible(false);
+    updateExif();
+    m_exif->open();
+    showOsd(); // keeps the cursor visible
+}
+
+void MainWindow::updateExif()
+{
+    const QString path = currentPath();
+    if (path.isEmpty()) {
+        m_exif->setContent({}, {});
+        if (m_exif->isVisible()) { // nothing left to describe
+            m_exif->hide();
+            m_view->setFocus();
+        }
+        return;
+    }
+    // Reads only the file's metadata (a few kB at the start), so it's quick enough here
+    m_exif->setContent(QFileInfo(path).fileName(), readExifDetails(path));
 }
 
 void MainWindow::openPath(const QString &path)
@@ -718,6 +758,8 @@ void MainWindow::showIndex(int index)
     updateSpinner();
     m_loader->releaseFull();
     m_loader->request(currentPath());
+    if (m_exif->isVisible())
+        updateExif();
 
     for (int offset : {1, -1, 2})
         if (int i = index + offset; i >= 0 && i < m_files.size())
@@ -821,6 +863,7 @@ void MainWindow::deleteCurrent()
         m_view->clear();
         updateTitle();
         updateInfo({});
+        updateExif();
         updateActions();
         applyStripOpacity();
         showOsd();

@@ -29,6 +29,7 @@ enum class OsdIcon {
     Filmstrip,
     Settings,
     Help,
+    Camera, // EXIF details
     More, // three dots: About
     Keyboard,
     Mouse,

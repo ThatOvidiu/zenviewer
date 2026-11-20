@@ -160,6 +160,8 @@ for module in qtbase qtsvg qtimageformats; do
     [ -d "/tmp/b/$module-everywhere-src-$qt" ] || tar xf "/w/src/$module-everywhere-src-$qt.tar.xz" -C /tmp/b
 done
 QT_VERSION=$qt python3 /recipe/notices.py /tmp/b /tmp/z/system-libs "$app"
+cp /tmp/z/src/third_party/TinyEXIF/LICENSE "$app/licenses/TinyEXIF-LICENSE.txt"
+cp /tmp/z/src/third_party/TinyEXIF/LICENSE.easyexif "$app/licenses/TinyEXIF-easyexif-LICENSE.txt"
 
 # Check: nothing the bundle needs is missing, and it starts
 if LD_LIBRARY_PATH= ldd "$app/zenviewer" "$lib"/*.so* "$lib"/*/*.so | grep 'not found'; then
