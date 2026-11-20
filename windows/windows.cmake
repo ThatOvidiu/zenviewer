@@ -70,3 +70,6 @@ install(CODE [[
 install(FILES ${PROJECT_SOURCE_DIR}/LICENSE DESTINATION . RENAME LICENSE.txt)
 install(FILES ${CMAKE_CURRENT_LIST_DIR}/notices/THIRD-PARTY-NOTICES.txt DESTINATION .)
 install(DIRECTORY ${CMAKE_CURRENT_LIST_DIR}/notices/licenses DESTINATION .)
+# TinyEXIF, built into the exe (third_party/TinyEXIF)
+install(FILES ${PROJECT_SOURCE_DIR}/third_party/TinyEXIF/LICENSE DESTINATION licenses RENAME TinyEXIF-LICENSE.txt)
+install(FILES ${PROJECT_SOURCE_DIR}/third_party/TinyEXIF/LICENSE.easyexif DESTINATION licenses RENAME TinyEXIF-easyexif-LICENSE.txt)

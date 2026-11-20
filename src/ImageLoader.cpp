@@ -71,6 +71,14 @@ QFuture<DecodeResult> spawn(QThreadPool &pool, int priority, Task task)
 }
 }
 
+QImage decodeImage(const QString &path, const QSize &box, QString *error)
+{
+    DecodeResult result = decode(path, box);
+    if (error)
+        *error = result.error;
+    return result.image;
+}
+
 const QList<QByteArray> &imageFormats()
 {
     static const QList<QByteArray> formats = {"bmp", "cur", "gif", "icns", "ico", "jpeg", "jpg", "mng", "pbm", "pgm",

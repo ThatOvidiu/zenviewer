@@ -11,6 +11,8 @@ finish-args:
   - --socket=wayland
   - --socket=fallback-x11
   - --share=ipc
+  # Printing goes to the system's CUPS
+  - --socket=cups
   # A viewer walks the folder of the image it was given and moves files to the
   # trash, which the file-chooser portal (one file at a time) can't give it
   - --filesystem=host

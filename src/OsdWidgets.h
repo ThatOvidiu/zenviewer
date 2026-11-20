@@ -1,9 +1,12 @@
 #pragma once
 
+#include "ExifInfo.h"
 #include "OsdIcons.h"
 
 #include <QTimer>
 #include <QWidget>
+
+class QMenu;
 
 class QAbstractButton;
 class QAction;
@@ -16,6 +19,9 @@ qreal osdScale(const QWidget *view);
 qreal osdScale(int height);
 // How a shortcut is written on screen
 QString keyLabel(const QKeySequence &sequence);
+
+// Dark, rounded, like the other panels: for the right-click menu
+void styleOsdMenu(QMenu *menu);
 
 // Translucent overlay element. Opacity is driven by the OSD fade; at zero
 // the widget hides so mouse events reach the image underneath.
@@ -344,8 +350,9 @@ private:
 };
 
 // File browser inside the window rather than a separate one that a full-screen
-// viewer could cover. Takes an image or a whole folder. While shown it swallows
-// every shortcut; clicking outside the browser cancels.
+// viewer could cover. Takes an image or a whole folder, or (askFolder) only a
+// folder: where to copy or move files. While shown it swallows every shortcut;
+// clicking outside the browser cancels.
 class OpenOverlay : public QWidget
 {
     Q_OBJECT
@@ -353,9 +360,12 @@ class OpenOverlay : public QWidget
 public:
     explicit OpenOverlay(QWidget *parent);
     void ask(const QString &title, const QString &startDir, const QString &nameFilters);
+    // acceptText names the button that takes the folder ("Copy here")
+    void askFolder(const QString &title, const QString &startDir, const QString &acceptText);
 
 signals:
     void chosen(const QString &path);
+    void folderChosen(const QString &folder);
     void closed();
 
 protected:
@@ -365,9 +375,10 @@ protected:
     void resizeEvent(QResizeEvent *event) override;
 
 private:
+    void start(QFileDialog *dialog, bool folderOnly);
     void placeDialog();
     void fitSidebar();
-    void applyColorScheme();
+    void applyStyle();
 
     QFileDialog *m_dialog = nullptr;
     QAbstractButton *m_close = nullptr; // the round × above the dialog's top-right corner
@@ -466,6 +477,53 @@ private:
     int m_group = 0;
     int m_row = 0;
     bool m_doneSelected = false;
+};
+
+// The EXIF details of the image on screen, in groups (camera, exposure, picture,
+// location) side by side like the settings panel's, in the type and on the
+// backdrop of the info panel, centred over the image. ← / → and the wheel ask for
+// the previous / next image, which the window answers with setContent(); E, Esc,
+// Enter, Done or a click outside close it. While shown it takes focus and swallows
+// every shortcut.
+class ExifOverlay : public QWidget
+{
+    Q_OBJECT
+
+public:
+    explicit ExifOverlay(QWidget *parent);
+    void setContent(const QList<ExifSection> &sections);
+    void open();
+
+signals:
+    void navigateRequested(int step);
+    void closed();
+
+protected:
+    bool event(QEvent *event) override;
+    void paintEvent(QPaintEvent *event) override;
+    bool focusNextPrevChild(bool next) override;
+    void keyPressEvent(QKeyEvent *event) override;
+    void mouseMoveEvent(QMouseEvent *event) override;
+    void mouseReleaseEvent(QMouseEvent *event) override;
+    void wheelEvent(QWheelEvent *event) override;
+
+private:
+    struct Layout
+    {
+        qreal scale = 1.0;
+        QRectF panel;
+        QList<QRectF> groups; // one per section, title included
+        QList<qreal> labelWidths; // per section, at scale 1
+        QRectF done;
+    };
+
+    // The sections, or a single title-only one saying there are none
+    QList<ExifSection> shownSections() const;
+    Layout computeLayout() const;
+    void close();
+
+    QList<ExifSection> m_sections;
+    int m_wheel = 0; // wheel travel not yet turned into a step
 };
 
 // Help > About: the app's name, icon, version, author and licence on a card.

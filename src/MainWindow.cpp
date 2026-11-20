@@ -1,7 +1,10 @@
 #include "MainWindow.h"
 
+#include "ExifInfo.h"
 #include "Filmstrip.h"
 #include "ImageLoader.h"
+#include "FileOps.h"
+#include "ImagePrinter.h"
 #include "ImageView.h"
 #include "OsdWidgets.h"
 
@@ -10,15 +13,17 @@
 #include <QCloseEvent>
 #include <QDateTime>
 #include <QDir>
+#include <QFileInfo>
 #include <QImageReader>
 #include <QKeyEvent>
 #include <QLocale>
+#include <QMenu>
 #include <QMimeData>
-#include <QSettings>
 #include <QTimer>
 #include <QVariantAnimation>
 
 #include <algorithm>
+#include <utility>
 
 namespace {
 const QColor ViewBackground(16, 16, 16);
@@ -121,12 +126,6 @@ MainWindow::MainWindow(QWidget *parent)
     , m_stripKeyTimer(new QTimer(this))
     , m_slideTimer(new QTimer(this))
 {
-    QSettings settings;
-    m_slideIntervalMs = nearestSlideInterval(settings.value("slideshow/interval", m_slideIntervalMs).toInt());
-    const auto effect = TransitionOverlay::Effect(settings.value("slideshow/effect", int(m_effect)).toInt());
-    if (TransitionOverlay::effects().contains(effect))
-        m_effect = effect;
-
     setCentralWidget(m_view);
     setMinimumSize(640, 420);
     m_view->setBackgroundBrush(ViewBackground);
@@ -191,8 +190,7 @@ MainWindow::MainWindow(QWidget *parent)
     // Any mouse activity inside the window brings the OSD back
     qApp->installEventFilter(this);
 
-    if (!restoreGeometry(settings.value("window/geometry").toByteArray()))
-        resize(1100, 750);
+    resize(1100, 750);
 
     updateActions();
     updatePlaybackUi();
@@ -227,11 +225,11 @@ void MainWindow::createActions()
                      OsdIcon::Previous);
     m_nextAct = help(add(tr("Next image"), {Qt::Key_Right, Qt::Key_PageDown}, [this] { navigate(+1); }),
                      OsdIcon::Next);
-    help(add(tr("First image"), {Qt::Key_Home}, [this] { showIndex(0); }));
-    help(add(tr("Last image"), {Qt::Key_End}, [this] { showIndex(m_files.size() - 1); }));
-    help(add(tr("Shorter slide interval"), {Qt::Key_BracketLeft}, [this] { stepSlideInterval(-1); }));
-    help(add(tr("Longer slide interval"), {Qt::Key_BracketRight}, [this] { stepSlideInterval(+1); }));
-    auto *settingsAct = help(add(tr("Slideshow settings"), {Qt::Key_S}, [this] {
+    m_firstAct = help(add(tr("First image"), {Qt::Key_Home}, [this] { showIndex(0); }));
+    m_lastAct = help(add(tr("Last image"), {Qt::Key_End}, [this] { showIndex(m_files.size() - 1); }));
+    m_shorterAct = help(add(tr("Shorter slide interval"), {Qt::Key_BracketLeft}, [this] { stepSlideInterval(-1); }));
+    m_longerAct = help(add(tr("Longer slide interval"), {Qt::Key_BracketRight}, [this] { stepSlideInterval(+1); }));
+    QAction *settingsAct = m_settingsAct = help(add(tr("Slideshow settings"), {Qt::Key_S}, [this] {
         setHelpVisible(false);
         m_settings->open();
         showOsd(); // keeps the cursor visible
@@ -243,25 +241,27 @@ void MainWindow::createActions()
         help(add(tr("Fit to window"), {Qt::Key_0}, [this] { m_view->fitToWindow(); }), OsdIcon::FitWindow),
         help(add(tr("Actual size / fit"), {Qt::Key_1}, [this] { m_view->toggleActualSize(); }), OsdIcon::ActualSize),
         add(tr("Trash (press twice)"), {QKeySequence::Delete}, [this] { deleteCurrent(); }),
+        help(add(tr("EXIF details"), {Qt::Key_E}, [this] { showExif(); }), OsdIcon::Camera),
+        help(add(tr("Print or save as PDF"), {QKeySequence::Print}, [this] { printCurrent(); }), OsdIcon::Print),
     };
     QAction *zoomInAct = m_imageActions[0], *zoomOutAct = m_imageActions[1], *fitAct = m_imageActions[2],
             *actualAct = m_imageActions[3];
+    m_exifAct = m_imageActions[5];
+    m_printAct = m_imageActions[6];
 
     m_infoAct = help(add(tr("Info panel"), {Qt::Key_I}, [] {}), OsdIcon::Info);
     m_infoAct->setCheckable(true);
     m_filmstripAct = help(add(tr("Thumbnails on / off"), {Qt::Key_T}, [] {}), OsdIcon::Filmstrip);
     m_filmstripAct->setCheckable(true);
-    m_filmstripAct->setChecked(QSettings().value("osd/filmstrip", true).toBool());
+    m_filmstripAct->setChecked(true);
     m_loopAct = help(add(tr("Loop: last image leads to first"), {Qt::Key_L}, [] {}));
     m_loopAct->setCheckable(true);
-    m_loopAct->setChecked(QSettings().value("view/loop", false).toBool());
     connect(m_loopAct, &QAction::toggled, this, [this](bool on) {
-        QSettings().setValue("view/loop", on);
         toast(on ? tr("Loop on") : tr("Loop off"), OsdIcon::None);
         updateActions();
     });
     // Only for now: the left edge always brings it back, so it can't be left off by accident
-    help(add(tr("Show / hide icon bar"), {Qt::Key_M}, [this] {
+    m_iconBarAct = help(add(tr("Show / hide icon bar"), {Qt::Key_M}, [this] {
         if (cardOpen())
             return;
         if (m_barShown) {
@@ -293,7 +293,7 @@ void MainWindow::createActions()
     m_fullScreenAct = help(add(tr("Full screen"), {Qt::Key_F}, [this] { toggleFullScreen(); }),
                            OsdIcon::Fullscreen);
     m_openAct = help(add(tr("Open image or folder"), {Qt::Key_O}, [this] { openFileDialog(); }), OsdIcon::Open);
-    auto *helpAct = help(add(tr("Help"), {Qt::Key_H, Qt::Key_F1}, [this] { setHelpVisible(!m_help->isVisible()); }),
+    QAction *helpAct = m_helpAct = help(add(tr("Help"), {Qt::Key_H, Qt::Key_F1}, [this] { setHelpVisible(!m_help->isVisible()); }),
                          OsdIcon::Help);
     m_aboutAct = help(add(tr("About"), {Qt::Key_A}, [this] { setAboutVisible(!m_about->isVisible()); }),
                       OsdIcon::More);
@@ -310,7 +310,7 @@ void MainWindow::createActions()
         else if (isFullScreen())
             toggleFullScreen();
     }));
-    help(add(tr("Quit (asks first)"), {Qt::Key_Q, Qt::Key_X},
+    m_quitAct = help(add(tr("Quit (asks first)"), {Qt::Key_Q, Qt::Key_X},
              [this] { confirmQuit(); }));
 
     m_controlBar = new ControlBar(m_view);
@@ -327,6 +327,8 @@ void MainWindow::createActions()
     m_controlBar->addButton(fitAct, OsdIcon::FitWindow);
     m_controlBar->addSeparator();
     m_controlBar->addButton(m_infoAct, OsdIcon::Info);
+    m_controlBar->addButton(m_exifAct, OsdIcon::Camera);
+    m_controlBar->addButton(m_printAct, OsdIcon::Print);
     m_controlBar->addButton(m_fullScreenAct, OsdIcon::Fullscreen);
     m_controlBar->addButton(settingsAct, OsdIcon::Settings);
     m_controlBar->addButton(m_filmstripAct, OsdIcon::Filmstrip);
@@ -354,7 +356,6 @@ void MainWindow::createOsd()
         layoutOsd();
     });
     connect(m_filmstripAct, &QAction::toggled, this, [this](bool on) {
-        QSettings().setValue("osd/filmstrip", on);
         toast(on ? tr("Thumbnails on") : tr("Thumbnails off"));
         applyStripOpacity();
         m_revealStrip = on;
@@ -371,6 +372,7 @@ void MainWindow::createOsd()
 
     m_open = new OpenOverlay(m_view);
     connect(m_open, &OpenOverlay::chosen, this, &MainWindow::openPath);
+    connect(m_open, &OpenOverlay::folderChosen, this, &MainWindow::transferTo);
     connect(m_open, &OpenOverlay::closed, this, [this] {
         m_view->setFocus();
         showOsd(); // restart the hide timer
@@ -395,6 +397,17 @@ void MainWindow::createOsd()
         showOsd(); // restart the hide timer
     });
 
+    m_exif = new ExifOverlay(m_view);
+    connect(m_exif, &ExifOverlay::navigateRequested, this, [this](int step) {
+        m_stripKeyTimer->start(); // same as the left / right keys
+        navigate(step);
+        updatePanels();
+    });
+    connect(m_exif, &ExifOverlay::closed, this, [this] {
+        m_view->setFocus();
+        showOsd(); // restart the hide timer
+    });
+
     m_help = new HelpOverlay(m_view);
     connect(m_help, &HelpOverlay::closeRequested, this, [this] { setHelpVisible(false); });
 
@@ -402,8 +415,13 @@ void MainWindow::createOsd()
     connect(m_about, &AboutOverlay::closeRequested, this, [this] { setAboutVisible(false); });
 
     m_confirm = new ConfirmOverlay(m_view);
-    connect(m_confirm, &ConfirmOverlay::accepted, this, &QWidget::close);
+    connect(m_confirm, &ConfirmOverlay::accepted, this, [this] {
+        m_view->setFocus();
+        if (const auto yes = std::exchange(m_confirmYes, {}))
+            yes();
+    });
     connect(m_confirm, &ConfirmOverlay::rejected, this, [this] {
+        m_confirmYes = {};
         m_view->setFocus();
         showOsd(); // restart the hide timer
     });
@@ -428,6 +446,7 @@ void MainWindow::createOsd()
         {{tr("Move")}, OsdIcon::None, tr("Show title and arrows")},
         {{tr("Left edge")}, OsdIcon::None, tr("Show icon bar")},
         {{tr("Bottom edge")}, OsdIcon::Filmstrip, tr("Show thumbnails")},
+        {{tr("Right click")}, OsdIcon::None, tr("Menu with every command")},
         {{tr("Wheel")}, OsdIcon::Next, tr("Previous / next image")},
         {{tr("Ctrl+Wheel")}, OsdIcon::ZoomIn, tr("Zoom at cursor")},
         {{tr("Drag")}, OsdIcon::None, tr("Pan the image")},
@@ -513,6 +532,7 @@ void MainWindow::layoutOsd()
     m_help->setReservedLeft(0); // the icon bar hides while the help is up
     m_open->setGeometry(r);
     m_settings->setGeometry(r);
+    m_exif->setGeometry(r);
     m_confirm->setGeometry(r);
 }
 
@@ -532,7 +552,7 @@ void MainWindow::hideOsd(bool force)
     if (!m_view->hasImage())
         return; // keep the controls up while there is nothing to look at
     if (!force && (osdHovered() || cardOpen() || m_confirm->isVisible() || m_open->isVisible()
-                   || m_settings->isVisible())) {
+                   || m_settings->isVisible() || m_exif->isVisible())) {
         m_osdHideTimer->start();
         return;
     }
@@ -607,7 +627,7 @@ void MainWindow::setAboutVisible(bool visible)
 
 bool MainWindow::overlayOpen() const
 {
-    return m_open->isVisible() || m_settings->isVisible() || m_confirm->isVisible();
+    return m_open->isVisible() || m_settings->isVisible() || m_exif->isVisible() || m_confirm->isVisible();
 }
 
 bool MainWindow::osdHovered() const
@@ -644,6 +664,48 @@ void MainWindow::setHelpVisible(bool visible)
         showOsd();
     }
     updatePanels();
+}
+
+void MainWindow::showExif()
+{
+    setHelpVisible(false);
+    setAboutVisible(false);
+    updateExif();
+    m_exif->open();
+    showOsd(); // keeps the cursor visible
+}
+
+void MainWindow::printCurrent()
+{
+    const QString path = currentPath();
+    if (path.isEmpty())
+        return;
+    setHelpVisible(false);
+    setAboutVisible(false);
+    if (m_slideshow && !m_slideshowPaused)
+        playPause(); // the slides would keep changing behind the preview
+    if (!m_printer)
+        m_printer = std::make_unique<ImagePrinter>();
+    const QString message = m_printer->print(path, this);
+    m_view->setFocus();
+    if (!message.isEmpty())
+        toast(message, OsdIcon::Print, 3000);
+    showOsd();
+}
+
+void MainWindow::updateExif()
+{
+    const QString path = currentPath();
+    if (path.isEmpty()) {
+        m_exif->setContent({});
+        if (m_exif->isVisible()) { // nothing left to describe
+            m_exif->hide();
+            m_view->setFocus();
+        }
+        return;
+    }
+    // Reads only the file's metadata (a few kB at the start), so it's quick enough here
+    m_exif->setContent(readExifDetails(path));
 }
 
 void MainWindow::openPath(const QString &path)
@@ -718,6 +780,8 @@ void MainWindow::showIndex(int index)
     updateSpinner();
     m_loader->releaseFull();
     m_loader->request(currentPath());
+    if (m_exif->isVisible())
+        updateExif();
 
     for (int offset : {1, -1, 2})
         if (int i = index + offset; i >= 0 && i < m_files.size())
@@ -800,17 +864,128 @@ void MainWindow::deleteCurrent()
         return;
     }
     m_deleteArmed.invalidate();
+    trashFiles({path});
+}
 
-    if (!QFile::moveToTrash(path)) {
-        toast(tr("Could not move to trash"), OsdIcon::Delete, 3000);
+// Names for questions and messages: "demo.jpg", "demo.jpg and demo.NEF"
+QString MainWindow::fileNames(const QStringList &files)
+{
+    QStringList names;
+    for (const QString &file : files)
+        names << QFileInfo(file).fileName();
+    if (names.size() < 2)
+        return names.value(0);
+    const QString last = names.takeLast();
+    return tr("%1 and %2").arg(names.join(QStringLiteral(", ")), last);
+}
+
+void MainWindow::confirmDelete(const QStringList &files)
+{
+    if (files.isEmpty())
         return;
+    setHelpVisible(false);
+    setAboutVisible(false);
+    m_confirmYes = [this, files] { trashFiles(files); };
+    m_confirm->ask(tr("Move %1 to the trash?").arg(fileNames(files)), tr("Move to trash"), tr("Cancel"));
+    showOsd(); // keeps the cursor visible
+}
+
+void MainWindow::trashFiles(const QStringList &files)
+{
+    for (const QString &file : files) {
+        if (!QFile::moveToTrash(file)) {
+            toast(tr("Could not move %1 to trash").arg(QFileInfo(file).fileName()), OsdIcon::Delete, 3000);
+            return;
+        }
+        dropFromList(file);
     }
     toast(tr("Moved to trash"), OsdIcon::Delete);
+}
 
+void MainWindow::askTransfer(const QStringList &files, bool move)
+{
+    if (files.isEmpty())
+        return;
+    setHelpVisible(false);
+    setAboutVisible(false);
+    if (m_slideshow && !m_slideshowPaused)
+        playPause(); // the image would change while the folder is chosen
+    m_transferFiles = files;
+    m_transferMove = move;
+    // The folder chosen last time in this run, for copying or moving, if it is still
+    // there; the first time, the user's home folder
+    QString startDir = m_lastTransferFolder;
+    if (startDir.isEmpty() || !QFileInfo(startDir).isDir())
+        startDir = QDir::homePath();
+    m_open->askFolder(move ? tr("Move %1 to").arg(fileNames(files)) : tr("Copy %1 to").arg(fileNames(files)),
+                      startDir, move ? tr("Move here") : tr("Copy here"));
+    showOsd(); // keeps the cursor visible
+}
+
+void MainWindow::transferTo(const QString &folder)
+{
+    const QStringList files = std::exchange(m_transferFiles, {});
+    const bool move = m_transferMove;
+    if (files.isEmpty())
+        return;
+    const QFileInfo target(folder);
+    if (!target.isDir()) {
+        toast(tr("Not a folder: %1").arg(QDir::toNativeSeparators(folder)), OsdIcon::Open, 3000);
+        return;
+    }
+    m_lastTransferFolder = target.absoluteFilePath();
+    if (target.canonicalFilePath() == QFileInfo(QFileInfo(files.first()).absolutePath()).canonicalFilePath()) {
+        toast(tr("Already in that folder"), OsdIcon::Open, 3000);
+        return;
+    }
+
+    const auto run = [this, files, folder, move] {
+        const QString failed = transferFiles(files, folder, move);
+        if (move) {
+            for (const QString &file : files) {
+                if (!QFileInfo::exists(file))
+                    dropFromList(file);
+            }
+        }
+        const QString name = QDir(folder).dirName();
+        const QString where = name.isEmpty() ? QDir::toNativeSeparators(folder) : name;
+        if (!failed.isEmpty())
+            toast(move ? tr("Could not move %1").arg(failed) : tr("Could not copy %1").arg(failed), OsdIcon::Open, 3000);
+        else
+            toast(move ? tr("Moved to %1").arg(where) : tr("Copied to %1").arg(where), OsdIcon::Open, 2000);
+    };
+
+    const QStringList existing = existingTargets(files, folder);
+    if (existing.isEmpty()) {
+        run();
+        return;
+    }
+    m_confirmYes = run;
+    m_confirm->ask(existing.size() == 1 ? tr("%1 is already there. Replace it?").arg(fileNames(existing))
+                                        : tr("%1 are already there. Replace them?").arg(fileNames(existing)),
+                   tr("Replace"), tr("Cancel"));
+    showOsd();
+}
+
+// Takes a file that is gone (trashed, moved away) out of the list, if it is in it
+void MainWindow::dropFromList(const QString &path)
+{
+    const int removed = int(m_files.indexOf(path));
+    if (removed < 0)
+        return;
     m_loader->forget(path);
-    const int removed = m_index;
     m_files.removeAt(removed);
     m_filmstrip->removeAt(removed);
+    if (removed != m_index) {
+        if (removed < m_index) {
+            --m_index;
+            m_filmstrip->setCurrentIndex(m_index);
+        }
+        updateTitle();
+        updateActions();
+        layoutOsd();
+        return;
+    }
     m_index = -1;
     layoutOsd();
 
@@ -821,6 +996,7 @@ void MainWindow::deleteCurrent()
         m_view->clear();
         updateTitle();
         updateInfo({});
+        updateExif();
         updateActions();
         applyStripOpacity();
         showOsd();
@@ -840,7 +1016,6 @@ void MainWindow::toggleFullScreen()
 void MainWindow::setSlideInterval(int ms)
 {
     m_slideIntervalMs = ms;
-    QSettings().setValue("slideshow/interval", ms);
     m_settings->setCurrent(SettingsIntervalGroup, ms);
     if (m_slideTimer->isActive())
         m_slideTimer->start(m_slideIntervalMs);
@@ -851,7 +1026,6 @@ void MainWindow::setSlideInterval(int ms)
 void MainWindow::setSlideEffect(TransitionOverlay::Effect effect)
 {
     m_effect = effect;
-    QSettings().setValue("slideshow/effect", int(effect));
     m_settings->setCurrent(SettingsEffectGroup, int(effect));
     if (!m_settings->isVisible())
         toast(TransitionOverlay::effectName(effect), OsdIcon::Settings);
@@ -988,9 +1162,107 @@ void MainWindow::updateInfo(const QSize &imageSize)
     layoutOsd();
 }
 
+void MainWindow::showContextMenu(const QPoint &globalPos)
+{
+    QMenu menu(this);
+    styleOsdMenu(&menu);
+
+    // Each entry stands in for an action, so the menu shows its key and does just
+    // what the key does; the key is shown, not registered a second time
+    const auto entry = [](QMenu *into, QAction *action, OsdIcon icon = OsdIcon::None, const QString &text = {}) {
+        const QKeySequence key = action->shortcut();
+        QString label = text.isEmpty() ? action->text() : text;
+        if (!key.isEmpty())
+            label += QLatin1Char('\t') + keyLabel(key);
+        QAction *item = into->addAction(label);
+        if (action->isCheckable()) {
+            item->setCheckable(true);
+            item->setChecked(action->isChecked());
+        } else {
+            item->setIcon(osdIconSet(icon));
+        }
+        item->setEnabled(action->isEnabled());
+        connect(item, &QAction::triggered, action, [action] { action->trigger(); });
+        return item;
+    };
+
+    // Copy, move or delete the image, and with it or on its own its raw file, if there is one
+    const QString path = currentPath();
+    QMenu *file = menu.addMenu(tr("File"));
+    styleOsdMenu(file);
+    file->setEnabled(!path.isEmpty());
+    const QStringList raws = path.isEmpty() ? QStringList() : rawCompanions(path);
+    const auto fileCommand = [&](const QString &text, OsdIcon icon, auto run) {
+        if (raws.isEmpty()) {
+            QAction *item = file->addAction(osdIconSet(icon), text);
+            connect(item, &QAction::triggered, this, [run, path] { run(QStringList{path}); });
+            return;
+        }
+        QMenu *which = file->addMenu(osdIconSet(icon), text);
+        styleOsdMenu(which);
+        for (const QStringList &files : {QStringList{path}, QStringList{path} + raws, raws}) {
+            QAction *item = which->addAction(fileNames(files));
+            connect(item, &QAction::triggered, this, [run, files] { run(files); });
+        }
+    };
+    fileCommand(tr("Copy"), OsdIcon::Open, [this](const QStringList &files) { askTransfer(files, false); });
+    fileCommand(tr("Move"), OsdIcon::Open, [this](const QStringList &files) { askTransfer(files, true); });
+    file->addSeparator();
+    fileCommand(tr("Delete..."), OsdIcon::Delete, [this](const QStringList &files) { confirmDelete(files); });
+    menu.addSeparator();
+
+    entry(&menu, m_openAct, OsdIcon::Open, tr("Open image or folder..."));
+    menu.addSeparator();
+
+    entry(&menu, m_prevAct, OsdIcon::Previous);
+    entry(&menu, m_nextAct, OsdIcon::Next);
+    entry(&menu, m_firstAct);
+    entry(&menu, m_lastAct);
+
+    QMenu *slideshow = menu.addMenu(osdIconSet(OsdIcon::Play), tr("Slideshow"));
+    styleOsdMenu(slideshow);
+    entry(slideshow, m_slideshowAct, m_slideshow ? OsdIcon::Stop : OsdIcon::Play,
+          m_slideshow ? tr("Stop slideshow") : tr("Start slideshow"));
+    entry(slideshow, m_pauseAct, m_slideshowPaused ? OsdIcon::Play : OsdIcon::Pause,
+          m_slideshowPaused ? tr("Resume slideshow") : tr("Pause slideshow"))
+        ->setEnabled(m_slideshow);
+    slideshow->addSeparator();
+    entry(slideshow, m_shorterAct);
+    entry(slideshow, m_longerAct);
+    entry(slideshow, m_loopAct);
+    slideshow->addSeparator();
+    entry(slideshow, m_settingsAct, OsdIcon::Settings, tr("Slideshow settings..."));
+    menu.addSeparator();
+
+    const QList<OsdIcon> zoomIcons = {OsdIcon::ZoomIn, OsdIcon::ZoomOut, OsdIcon::FitWindow, OsdIcon::ActualSize};
+    for (int i = 0; i < zoomIcons.size(); ++i)
+        entry(&menu, m_imageActions[i], zoomIcons[i]);
+    menu.addSeparator();
+
+    entry(&menu, m_infoAct);
+    entry(&menu, m_exifAct, OsdIcon::Camera);
+    entry(&menu, m_printAct, OsdIcon::Print, tr("Print..."));
+    menu.addSeparator();
+
+    entry(&menu, m_filmstripAct);
+    entry(&menu, m_iconBarAct, OsdIcon::None, m_barShown ? tr("Hide icon bar") : tr("Show icon bar"));
+    entry(&menu, m_fullScreenAct, isFullScreen() ? OsdIcon::Windowed : OsdIcon::Fullscreen);
+    menu.addSeparator();
+
+    entry(&menu, m_helpAct, OsdIcon::Help);
+    entry(&menu, m_aboutAct, OsdIcon::More);
+    menu.addSeparator();
+    entry(&menu, m_quitAct, OsdIcon::None, tr("Quit"));
+
+    showOsd(); // keeps the cursor visible
+    menu.exec(globalPos);
+    m_view->setFocus();
+}
+
 void MainWindow::confirmQuit()
 {
     setHelpVisible(false);
+    m_confirmYes = [this] { close(); };
     m_confirm->ask(tr("Quit ZenViewer?"), tr("Yes"), tr("No"));
     showOsd(); // keeps the cursor visible
 }
@@ -1019,6 +1291,15 @@ bool MainWindow::eventFilter(QObject *watched, QEvent *event)
             updatePanels();
         }
         break;
+    case QEvent::ContextMenu: {
+        // Right click (or the Menu key) anywhere in the window, unless a panel that takes
+        // the mouse is open
+        auto *widget = qobject_cast<QWidget *>(watched);
+        if (!widget || widget->window() != this || overlayOpen())
+            break;
+        showContextMenu(static_cast<QContextMenuEvent *>(event)->globalPos());
+        return true;
+    }
     case QEvent::ShortcutOverride: // every key press, before shortcuts consume it
         // The info panel comes and goes on its own, without the controls
         if (m_infoAct->shortcuts().contains(static_cast<QKeyEvent *>(event)->keyCombination()))
@@ -1079,9 +1360,6 @@ void MainWindow::changeEvent(QEvent *event)
 void MainWindow::closeEvent(QCloseEvent *event)
 {
     stopSlideshow();
-    if (isFullScreen())
-        showNormal();
-    QSettings().setValue("window/geometry", saveGeometry());
     event->accept();
 }
 

@@ -13,3 +13,10 @@ foreach(size 16 24 32 48 64 128 256)
         DESTINATION ${CMAKE_INSTALL_DATADIR}/icons/hicolor/${size}x${size}/apps RENAME zenviewer.png)
 endforeach()
 install(FILES ${PROJECT_SOURCE_DIR}/src/icons/zenviewer.svg DESTINATION ${CMAKE_INSTALL_DATADIR}/icons/hicolor/scalable/apps)
+
+# ZenViewer's licence, and TinyEXIF's, which is built into the program (third_party/TinyEXIF)
+install(FILES ${PROJECT_SOURCE_DIR}/LICENSE DESTINATION ${CMAKE_INSTALL_DATADIR}/licenses/zenviewer)
+install(FILES ${PROJECT_SOURCE_DIR}/third_party/TinyEXIF/LICENSE
+    DESTINATION ${CMAKE_INSTALL_DATADIR}/licenses/zenviewer RENAME TinyEXIF-LICENSE)
+install(FILES ${PROJECT_SOURCE_DIR}/third_party/TinyEXIF/LICENSE.easyexif
+    DESTINATION ${CMAKE_INSTALL_DATADIR}/licenses/zenviewer RENAME TinyEXIF-easyexif-LICENSE)

@@ -13,11 +13,12 @@
 #include <QKeyEvent>
 #include <QLayout>
 #include <QListView>
+#include <QMenu>
 #include <QMouseEvent>
 #include <QPainter>
+#include <QPainterPath>
 #include <QPushButton>
 #include <QSplitter>
-#include <QStyleHints>
 #include <QSysInfo>
 #include <QTimer>
 #include <QTreeView>
@@ -32,6 +33,12 @@ const QColor CheckedColor(255, 255, 255, 55);
 const QColor TextColor(255, 255, 255);
 const QColor DimTextColor(255, 255, 255, 160);
 const QColor DisabledColor(255, 255, 255, 70);
+
+// The menu look, shared by the right-click menu, the open dialog and the settings panel
+const QColor MenuColor(24, 24, 27, 240);
+const QColor MenuOutlineColor(255, 255, 255, 40);
+const QColor MenuHighlightColor(255, 255, 255, 40);
+const QColor MenuSeparatorColor(255, 255, 255, 30);
 
 constexpr qreal BarPadding = 9;
 constexpr qreal ButtonSize = 44;
@@ -123,6 +130,24 @@ QString keyLabel(const QKeySequence &sequence)
         {"Left", "←"}, {"Right", "→"}, {"Up", "↑"}, {"Down", "↓"}};
     const QString text = sequence.toString(QKeySequence::NativeText);
     return arrows.value(text, text);
+}
+
+void styleOsdMenu(QMenu *menu)
+{
+    // Rounded corners need a see-through window; the panel colour is opaque
+    // enough that the picture behind doesn't make the text hard to read
+    menu->setWindowFlag(Qt::FramelessWindowHint);
+    menu->setWindowFlag(Qt::NoDropShadowWindowHint);
+    menu->setAttribute(Qt::WA_TranslucentBackground);
+    menu->setStyleSheet(QStringLiteral(
+        "QMenu { background: rgba(24, 24, 27, 240); border: 1px solid rgba(255, 255, 255, 40);"
+        "        border-radius: 10px; padding: 6px; color: white; }"
+        "QMenu::item { padding: 6px 24px 6px 8px; border-radius: 6px; background: transparent; }"
+        "QMenu::item:selected { background: rgba(255, 255, 255, 40); }"
+        "QMenu::item:disabled { color: rgba(255, 255, 255, 80); }"
+        "QMenu::icon { padding-left: 8px; }"
+        "QMenu::separator { height: 1px; background: rgba(255, 255, 255, 30); margin: 5px 8px; }"
+        "QMenu::right-arrow { width: 8px; height: 8px; margin-right: 8px; }"));
 }
 
 // ---------------------------------------------------------------- OsdWidget
@@ -1445,39 +1470,73 @@ protected:
     void leaveEvent(QEvent *) override { update(); }
 };
 
-// The open dialog's colours: the system's light or dark mode where Qt can tell
-// (Qt 6.5 and newer, on most systems), else a soft neutral grey
+// The open dialog in the right-click menu's look: dark whatever the system's
+// colours, rounded corners, rows and buttons highlighted the same way. Sizes
+// follow em, the dialog's font size, which grows with the window.
 QPalette openDialogPalette(QPalette palette)
 {
-    enum { Dark, Light, Neutral } scheme = Neutral;
-#if QT_VERSION >= QT_VERSION_CHECK(6, 5, 0)
-    switch (QGuiApplication::styleHints()->colorScheme()) {
-    case Qt::ColorScheme::Dark: scheme = Dark; break;
-    case Qt::ColorScheme::Light: scheme = Light; break;
-    default: break;
-    }
-#endif
-    struct Colors { QColor window, base, alternate, text, placeholder, button, disabled; };
-    const Colors c = scheme == Dark ? Colors{{32, 32, 35}, {20, 20, 22}, {28, 28, 31}, TextColor, DimTextColor,
-                                             {46, 46, 50}, DisabledColor}
-                   : scheme == Light ? Colors{{243, 243, 243}, {255, 255, 255}, {247, 247, 247}, {27, 27, 27},
-                                              {112, 112, 112}, {229, 229, 229}, {165, 165, 165}}
-                                     : Colors{{214, 214, 217}, {232, 232, 234}, {224, 224, 227}, {32, 32, 34},
-                                              {100, 100, 104}, {200, 200, 204}, {150, 150, 154}};
-    palette.setColor(QPalette::Window, c.window);
-    palette.setColor(QPalette::WindowText, c.text);
-    palette.setColor(QPalette::Base, c.base);
-    palette.setColor(QPalette::AlternateBase, c.alternate);
-    palette.setColor(QPalette::Text, c.text);
-    palette.setColor(QPalette::PlaceholderText, c.placeholder);
-    palette.setColor(QPalette::Button, c.button);
-    palette.setColor(QPalette::ButtonText, c.text);
-    palette.setColor(QPalette::Highlight, DockPrimaryColor);
-    palette.setColor(QPalette::HighlightedText, Qt::white);
-    palette.setColor(QPalette::Disabled, QPalette::Text, c.disabled);
-    palette.setColor(QPalette::Disabled, QPalette::WindowText, c.disabled);
-    palette.setColor(QPalette::Disabled, QPalette::ButtonText, c.disabled);
+    const QColor window(24, 24, 27);
+    palette.setColor(QPalette::Window, window);
+    palette.setColor(QPalette::WindowText, TextColor);
+    palette.setColor(QPalette::Base, window);
+    palette.setColor(QPalette::AlternateBase, QColor(30, 30, 33));
+    palette.setColor(QPalette::Text, TextColor);
+    palette.setColor(QPalette::PlaceholderText, DimTextColor);
+    palette.setColor(QPalette::Button, QColor(40, 40, 44));
+    palette.setColor(QPalette::ButtonText, TextColor);
+    palette.setColor(QPalette::Highlight, QColor(64, 64, 68));
+    palette.setColor(QPalette::HighlightedText, TextColor);
+    palette.setColor(QPalette::Light, QColor(70, 70, 74));
+    palette.setColor(QPalette::Midlight, QColor(56, 56, 60));
+    palette.setColor(QPalette::Mid, QColor(44, 44, 48));
+    palette.setColor(QPalette::Dark, QColor(16, 16, 18));
+    palette.setColor(QPalette::Shadow, Qt::black);
+    for (QPalette::ColorRole role : {QPalette::Text, QPalette::WindowText, QPalette::ButtonText})
+        palette.setColor(QPalette::Disabled, role, QColor(110, 110, 114));
     return palette;
+}
+
+QString openDialogStyleSheet(int em)
+{
+    const int pad = qMax(3, em / 4), radius = qMax(4, em * 3 / 8);
+    return QStringLiteral(
+        "QFileDialog { background: rgba(24, 24, 27, 240); border: 1px solid rgba(255, 255, 255, 40);"
+        "              border-radius: %1px; }"
+        "QFileDialog QLabel { color: rgba(255, 255, 255, 160); background: transparent; }"
+        "QFileDialog QListView, QFileDialog QTreeView { background: rgba(255, 255, 255, 6); color: white;"
+        "              border: 1px solid rgba(255, 255, 255, 30); border-radius: %2px; padding: %3px;"
+        "              outline: 0; selection-background-color: transparent; }"
+        "QFileDialog QListView::item, QFileDialog QTreeView::item { padding: %3px; border-radius: %2px; color: white; }"
+        "QFileDialog QListView::item:hover, QFileDialog QTreeView::item:hover { background: rgba(255, 255, 255, 22); }"
+        "QFileDialog QListView::item:selected, QFileDialog QTreeView::item:selected { background: rgba(255, 255, 255, 40); }"
+        "QFileDialog QTreeView::branch { background: transparent; }"
+        "QFileDialog QHeaderView { background: transparent; }"
+        "QFileDialog QHeaderView::section { background: transparent; color: rgba(255, 255, 255, 160); border: none;"
+        "              border-bottom: 1px solid rgba(255, 255, 255, 30); padding: %3px %4px; }"
+        "QFileDialog QLineEdit, QFileDialog QComboBox { background: rgba(255, 255, 255, 12); color: white;"
+        "              border: 1px solid rgba(255, 255, 255, 40); border-radius: %2px; padding: %3px %4px; }"
+        "QFileDialog QComboBox::drop-down { border: none; width: %5px; }"
+        "QFileDialog QComboBox::down-arrow { image: url(:/icons/down-arrow.svg); width: %8px; height: %8px; }"
+        "QFileDialog QComboBox QAbstractItemView { background: rgb(24, 24, 27); color: white;"
+        "              border: 1px solid rgba(255, 255, 255, 40); selection-background-color: rgba(255, 255, 255, 40); }"
+        "QFileDialog QPushButton { background: rgba(255, 255, 255, 14); color: white; border: 1px solid rgba(255, 255, 255, 40);"
+        "              border-radius: %2px; padding: %3px %5px; }"
+        "QFileDialog QPushButton:hover, QFileDialog QPushButton:focus { background: rgba(255, 255, 255, 40); }"
+        "QFileDialog QPushButton:disabled { color: rgba(255, 255, 255, 80); }"
+        "QFileDialog QToolButton { background: transparent; border: none; border-radius: %2px; padding: %3px; }"
+        "QFileDialog QToolButton:hover, QFileDialog QToolButton:checked { background: rgba(255, 255, 255, 40); }"
+        "QFileDialog QScrollBar:vertical { background: transparent; width: %6px; margin: 0; }"
+        "QFileDialog QScrollBar:horizontal { background: transparent; height: %6px; margin: 0; }"
+        "QFileDialog QScrollBar::handle { background: rgba(255, 255, 255, 60); border-radius: %7px; min-height: %5px; min-width: %5px; }"
+        "QFileDialog QScrollBar::handle:hover { background: rgba(255, 255, 255, 100); }"
+        "QFileDialog QScrollBar::add-line, QFileDialog QScrollBar::sub-line { width: 0; height: 0; }"
+        "QFileDialog QScrollBar::add-page, QFileDialog QScrollBar::sub-page { background: transparent; }"
+        "QFileDialog QSplitter::handle { background: transparent; }"
+        "QFileDialog QMenu { background: rgb(24, 24, 27); color: white; border: 1px solid rgba(255, 255, 255, 40); padding: %3px; }"
+        "QFileDialog QMenu::item { padding: %3px %5px; border-radius: %2px; }"
+        "QFileDialog QMenu::item:selected { background: rgba(255, 255, 255, 40); }")
+        .arg(radius * 2).arg(radius).arg(pad).arg(pad * 2).arg(em * 3 / 2).arg(qMax(8, em / 2)).arg(qMax(3, em / 4))
+        .arg(qMax(10, em * 4 / 5));
 }
 }
 
@@ -1493,17 +1552,15 @@ OpenOverlay::OpenOverlay(QWidget *parent)
         if (m_dialog)
             m_dialog->reject();
     });
-#if QT_VERSION >= QT_VERSION_CHECK(6, 5, 0)
-    // Follows the system switching between light and dark while the dialog is open
-    connect(QGuiApplication::styleHints(), &QStyleHints::colorSchemeChanged, this, &OpenOverlay::applyColorScheme);
-#endif
     hide();
 }
 
-void OpenOverlay::applyColorScheme()
+void OpenOverlay::applyStyle()
 {
-    if (m_dialog)
-        m_dialog->setPalette(openDialogPalette(m_dialog->palette()));
+    if (!m_dialog)
+        return;
+    m_dialog->setPalette(openDialogPalette(m_dialog->palette()));
+    m_dialog->setStyleSheet(openDialogStyleSheet(qMax(11, m_dialog->font().pixelSize())));
 }
 
 void OpenOverlay::ask(const QString &title, const QString &startDir, const QString &nameFilters)
@@ -1516,12 +1573,34 @@ void OpenOverlay::ask(const QString &title, const QString &startDir, const QStri
     dialog->setOption(QFileDialog::DontUseNativeDialog);
     dialog->setFileMode(QFileDialog::ExistingFile);
     dialog->setViewMode(QFileDialog::Detail);
-    dialog->setAutoFillBackground(true);
     dialog->addFolderButton(tr("Open this folder"));
+    start(dialog, false);
+}
 
-    applyColorScheme();
+void OpenOverlay::askFolder(const QString &title, const QString &startDir, const QString &acceptText)
+{
+    if (m_dialog)
+        return;
+    auto *dialog = new FileOrFolderDialog(this, title, startDir);
+    m_dialog = dialog;
+    dialog->setWindowFlags(Qt::Widget);
+    dialog->setOption(QFileDialog::DontUseNativeDialog);
+    dialog->setFileMode(QFileDialog::Directory);
+    dialog->setOption(QFileDialog::ShowDirsOnly);
+    dialog->setViewMode(QFileDialog::Detail);
+    dialog->setLabelText(QFileDialog::Accept, acceptText);
+    start(dialog, true);
+}
 
-    connect(dialog, &QDialog::finished, this, [this, dialog](int result) {
+void OpenOverlay::start(QFileDialog *fileDialog, bool folderOnly)
+{
+    auto *dialog = static_cast<FileOrFolderDialog *>(fileDialog);
+    // Drawn by the style sheet, with its rounded corners, rather than filled square
+    dialog->setAutoFillBackground(false);
+    dialog->setAttribute(Qt::WA_StyledBackground);
+    dialog->setSizeGripEnabled(false); // the window sizes it, not the mouse
+
+    connect(dialog, &QDialog::finished, this, [this, dialog, folderOnly](int result) {
         const QString path = result == QDialog::Accepted ? dialog->chosenPath() : QString();
         // Qt saves the columns for every app's file dialog, so leave them as they were found
         if (auto *list = dialog->findChild<QTreeView *>("treeView"))
@@ -1530,7 +1609,11 @@ void OpenOverlay::ask(const QString &title, const QString &startDir, const QStri
         m_dialog = nullptr;
         dialog->deleteLater();
         emit closed();
-        if (!path.isEmpty())
+        if (path.isEmpty())
+            return;
+        if (folderOnly)
+            emit folderChosen(path);
+        else
             emit chosen(path);
     });
 
@@ -1553,6 +1636,7 @@ void OpenOverlay::placeDialog()
         return;
     // Follows the window like the rest of the OSD
     m_dialog->setFont(pixelFont(font(), qMax(11, qRound(19.2 * height() / DockReferenceHeight))));
+    applyStyle(); // its sizes follow the font
     const QSize size(width() * 11 / 20, height() * 3 / 4);
     const QRect dialog(QPoint((width() - size.width()) / 2, (height() - size.height()) / 2), size);
     m_dialog->setGeometry(dialog);
@@ -1839,39 +1923,56 @@ void SettingsOverlay::paintEvent(QPaintEvent *)
     const qreal s = layout.scale;
     QPainter p(this);
     p.setRenderHint(QPainter::Antialiasing);
-    p.setPen(Qt::NoPen);
-    p.setBrush(BackdropColor);
-    p.drawRoundedRect(layout.panel, 14 * s, 14 * s);
+    // Like the right-click menu: a dark rounded panel, rows highlighted the same way,
+    // ticks for the chosen options and thin lines between the parts
+    p.setPen(QPen(MenuOutlineColor, 1));
+    p.setBrush(MenuColor);
+    p.drawRoundedRect(layout.panel.adjusted(0.5, 0.5, -0.5, -0.5), 12 * s, 12 * s);
 
     for (int g = 0; g < m_groups.size(); ++g) {
         const Group &group = m_groups[g];
         const QRectF column = layout.columns.at(g);
+        const QRectF title(column.left(), column.top() - (InfoTitleHeight + SettingsTitleGap) * s, column.width(), InfoTitleHeight * s);
+        if (g > 0) { // between the columns, halfway across the gap
+            const qreal x = column.left() - SettingsColumnGap / 2 * s;
+            p.setPen(QPen(MenuSeparatorColor, 1));
+            p.drawLine(QPointF(x, title.top() + 6 * s), QPointF(x, column.bottom()));
+        }
         p.setFont(infoTitleFont(font(), s));
-        drawShadowedText(p, QRectF(column.left(), column.top() - (InfoTitleHeight + SettingsTitleGap) * s, column.width(), InfoTitleHeight * s),
-                         group.title, TextColor);
+        p.setPen(TextColor);
+        p.drawText(title, Qt::AlignLeft | Qt::AlignVCenter, group.title);
 
         p.setFont(infoLineFont(font(), s));
         for (int r = 0; r < group.options.size(); ++r) {
             const QRectF row = rowRect(layout, g, r);
             if (!m_doneSelected && g == m_group && r == m_row) {
                 p.setPen(Qt::NoPen);
-                p.setBrush(QColor(255, 255, 255, 50));
-                p.drawRoundedRect(row, 8 * s, 8 * s);
+                p.setBrush(MenuHighlightColor);
+                p.drawRoundedRect(row, 6 * s, 6 * s);
             }
             if (group.options[r].value == group.current) {
-                p.setPen(Qt::NoPen);
-                p.setBrush(DockPrimaryColor);
-                p.drawEllipse(QPointF(row.left() + SettingsMarkerSlot / 2 * s, row.center().y()), 7 * s, 7 * s);
+                const QPointF c(row.left() + SettingsMarkerSlot / 2 * s, row.center().y());
+                QPainterPath tick;
+                tick.moveTo(c + QPointF(-6, 0) * s);
+                tick.lineTo(c + QPointF(-2, 4.5) * s);
+                tick.lineTo(c + QPointF(6.5, -5) * s);
+                p.setPen(QPen(TextColor, 2 * s, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+                p.setBrush(Qt::NoBrush);
+                p.drawPath(tick);
             }
-            drawShadowedText(p, row.adjusted(SettingsMarkerSlot * s, 0, 0, 0), group.options[r].text, QColor(255, 255, 255, 215));
+            p.setPen(TextColor);
+            p.drawText(row.adjusted(SettingsMarkerSlot * s, 0, 0, 0), Qt::AlignLeft | Qt::AlignVCenter, group.options[r].text);
         }
     }
 
-    p.setPen(m_doneSelected ? Qt::NoPen : QPen(QColor(255, 255, 255, 110), 1.5));
-    p.setBrush(m_doneSelected ? TextColor : QColor(255, 255, 255, 22));
-    p.drawRoundedRect(layout.done, layout.done.height() / 2, layout.done.height() / 2);
+    const qreal rule = layout.done.top() - SettingsDoneGap / 2 * s;
+    p.setPen(QPen(MenuSeparatorColor, 1));
+    p.drawLine(QPointF(layout.done.left(), rule), QPointF(layout.done.right(), rule));
+    p.setPen(QPen(MenuOutlineColor, 1));
+    p.setBrush(m_doneSelected ? MenuHighlightColor : QColor(255, 255, 255, 14));
+    p.drawRoundedRect(layout.done, 6 * s, 6 * s);
     p.setFont(pixelFont(font(), qMax(1, qRound(24 * s)), QFont::DemiBold));
-    p.setPen(m_doneSelected ? QColor(18, 18, 20) : TextColor);
+    p.setPen(TextColor);
     p.drawText(layout.done, Qt::AlignCenter, tr("Done"));
 
     p.setFont(pixelFont(font(), qMax(1, qRound(15 * s))));
@@ -1879,7 +1980,254 @@ void SettingsOverlay::paintEvent(QPaintEvent *)
     p.drawText(QRectF(layout.panel.left(), layout.panel.bottom() - SettingsFooterHeight * s, layout.panel.width(), SettingsFooterHeight * s),
                Qt::AlignCenter, tr("↑ ↓ ← →  choose   ·   Enter  set   ·   S / Esc  close"));
 }
+// -------------------------------------------------------------- ExifOverlay
 
+namespace {
+constexpr qreal ExifRowHeight = 34;
+constexpr qreal ExifLabelGap = 20;    // between a label and its value
+constexpr qreal ExifValueWidth = 440; // longer values are cut short
+constexpr qreal ExifGroupGap = 22;    // between rows of groups
+constexpr qreal ExifMinContentWidth = 320;
+constexpr qreal ExifTextSlack = 1.06;
+}
+
+ExifOverlay::ExifOverlay(QWidget *parent)
+    : QWidget(parent)
+{
+    setFocusPolicy(Qt::StrongFocus);
+    setMouseTracking(true);
+    hide();
+}
+
+void ExifOverlay::setContent(const QList<ExifSection> &sections)
+{
+    m_sections = sections;
+    update();
+}
+
+void ExifOverlay::open()
+{
+    m_wheel = 0;
+    show();
+    raise();
+    setFocus(Qt::OtherFocusReason);
+}
+
+void ExifOverlay::close()
+{
+    hide();
+    emit closed();
+}
+
+QList<ExifSection> ExifOverlay::shownSections() const
+{
+    if (!m_sections.isEmpty())
+        return m_sections;
+    return {{tr("No EXIF details"), {}}};
+}
+
+ExifOverlay::Layout ExifOverlay::computeLayout() const
+{
+    const QFontMetricsF titleMetrics(infoTitleFont(font(), 1.0));
+    const QFontMetricsF lineMetrics(infoLineFont(font(), 1.0));
+    const QList<ExifSection> sections = shownSections();
+
+    // Each group's size at nominal scale, in the info panel's type
+    Layout layout;
+    QList<QSizeF> sizes;
+    for (const ExifSection &section : sections) {
+        qreal label = 0, value = 0;
+        for (const auto &[name, text] : section.rows) {
+            label = qMax(label, lineMetrics.horizontalAdvance(name));
+            value = qMax(value, qMin(ExifValueWidth, lineMetrics.horizontalAdvance(text)));
+        }
+        // Small type is hinted relatively wider than at full size: some slack keeps it uncut
+        label *= ExifTextSlack;
+        value *= ExifTextSlack;
+        layout.labelWidths << label;
+        const qreal width = qMax(titleMetrics.horizontalAdvance(section.title) + 2,
+                                 section.rows.isEmpty() ? 0.0 : label + ExifLabelGap + value + 4);
+        sizes << QSizeF(width, InfoTitleHeight + SettingsTitleGap + section.rows.size() * ExifRowHeight);
+    }
+
+    // All the groups side by side, or fewer per row: whichever lets the panel be largest.
+    // Of those that are equally large, the one with rows most evenly filled (2 + 2, not 3 + 1).
+    const auto n = int(sections.size());
+    int perRow = n;
+    qreal bestScale = -1, bestWidth = 0, bestHeight = 0;
+    int bestGaps = 0;
+    for (int columns = n; columns >= 1; --columns) {
+        QList<qreal> widths(columns, 0.0);
+        QList<qreal> heights((n + columns - 1) / columns, 0.0);
+        for (int i = 0; i < n; ++i) {
+            widths[i % columns] = qMax(widths[i % columns], sizes[i].width());
+            heights[i / columns] = qMax(heights[i / columns], sizes[i].height());
+        }
+        qreal content = (columns - 1) * SettingsColumnGap, rows = (heights.size() - 1) * ExifGroupGap;
+        for (qreal w : std::as_const(widths))
+            content += w;
+        for (qreal h : std::as_const(heights))
+            rows += h;
+        const qreal width = 2 * InfoPadding + qMax(content, ExifMinContentWidth);
+        const qreal height = 2 * InfoPaddingY + rows + SettingsDoneGap + SettingsDoneHeight + SettingsFooterHeight;
+        // Smaller than the rest of the display only if the window can't hold it
+        const qreal scale = qMin(osdScale(this), qMin((this->width() - 2 * SettingsMargin) / width,
+                                                      (this->height() - 2 * SettingsMargin) / height));
+        const int gaps = int(heights.size()) * columns - n; // empty places in the last row
+        if (scale > bestScale + 1e-6 || (scale > bestScale - 1e-6 && gaps < bestGaps)) {
+            bestScale = scale;
+            bestGaps = gaps;
+            perRow = columns;
+            bestWidth = width;
+            bestHeight = height;
+        }
+    }
+
+    const qreal s = layout.scale = qMax(0.05, bestScale);
+    layout.panel = QRectF(0, 0, bestWidth * s, bestHeight * s);
+    layout.panel.moveCenter(QRectF(rect()).center());
+    const qreal left = layout.panel.left() + InfoPadding * s;
+    const qreal innerWidth = layout.panel.width() - 2 * InfoPadding * s;
+
+    QList<qreal> widths(perRow, 0.0);
+    QList<qreal> heights((n + perRow - 1) / perRow, 0.0);
+    for (int i = 0; i < n; ++i) {
+        widths[i % perRow] = qMax(widths[i % perRow], sizes[i].width());
+        heights[i / perRow] = qMax(heights[i / perRow], sizes[i].height());
+    }
+    qreal y = layout.panel.top() + InfoPaddingY * s;
+    for (int row = 0; row < heights.size(); ++row) {
+        qreal x = left;
+        for (int column = 0; column < perRow && row * perRow + column < n; ++column) {
+            layout.groups << QRectF(x, y, widths[column] * s, heights[row] * s);
+            x += (widths[column] + SettingsColumnGap) * s;
+        }
+        y += (heights[row] + ExifGroupGap) * s;
+    }
+    y -= ExifGroupGap * s;
+    layout.done = QRectF(left, y + SettingsDoneGap * s, innerWidth, SettingsDoneHeight * s);
+    return layout;
+}
+
+bool ExifOverlay::event(QEvent *event)
+{
+    // Claim every key so window shortcuts (E, arrows, Enter, ...) don't fire
+    if (event->type() == QEvent::ShortcutOverride) {
+        event->accept();
+        return true;
+    }
+    return QWidget::event(event);
+}
+
+bool ExifOverlay::focusNextPrevChild(bool)
+{
+    return false; // nothing to move between
+}
+
+void ExifOverlay::keyPressEvent(QKeyEvent *event)
+{
+    switch (event->key()) {
+    case Qt::Key_Left:
+    case Qt::Key_PageUp:
+        emit navigateRequested(-1);
+        break;
+    case Qt::Key_Right:
+    case Qt::Key_PageDown:
+        emit navigateRequested(+1);
+        break;
+    case Qt::Key_E:
+    case Qt::Key_Escape:
+    case Qt::Key_Return:
+    case Qt::Key_Enter:
+    case Qt::Key_Space:
+        close();
+        break;
+    default:
+        break;
+    }
+}
+
+void ExifOverlay::mouseMoveEvent(QMouseEvent *event)
+{
+    setCursor(computeLayout().done.contains(event->position()) ? Qt::PointingHandCursor : Qt::ArrowCursor);
+}
+
+void ExifOverlay::mouseReleaseEvent(QMouseEvent *event)
+{
+    if (event->button() != Qt::LeftButton)
+        return;
+    const Layout layout = computeLayout();
+    if (layout.done.contains(event->position()) || !layout.panel.contains(event->position()))
+        close();
+}
+
+void ExifOverlay::wheelEvent(QWheelEvent *event)
+{
+    // Like the wheel over the image: one notch, one picture
+    m_wheel += event->angleDelta().y();
+    if (qAbs(m_wheel) >= 120) {
+        emit navigateRequested(m_wheel > 0 ? -1 : 1);
+        m_wheel = 0;
+    }
+    event->accept();
+}
+
+void ExifOverlay::paintEvent(QPaintEvent *)
+{
+    const Layout layout = computeLayout();
+    const qreal s = layout.scale;
+    const QList<ExifSection> sections = shownSections();
+    QPainter p(this);
+    p.setRenderHint(QPainter::Antialiasing);
+    // The right-click menu's look, as in the settings panel
+    p.setPen(QPen(MenuOutlineColor, 1));
+    p.setBrush(MenuColor);
+    p.drawRoundedRect(layout.panel.adjusted(0.5, 0.5, -0.5, -0.5), 12 * s, 12 * s);
+
+    for (int g = 0; g < sections.size() && g < layout.groups.size(); ++g) {
+        const ExifSection &section = sections[g];
+        const QRectF group = layout.groups[g];
+        if (g > 0 && qAbs(layout.groups[g - 1].top() - group.top()) < 1) { // between groups side by side
+            const qreal x = (layout.groups[g - 1].right() + group.left()) / 2;
+            p.setPen(QPen(MenuSeparatorColor, 1));
+            p.drawLine(QPointF(x, group.top() + 6 * s), QPointF(x, qMax(group.bottom(), layout.groups[g - 1].bottom())));
+        }
+        p.setFont(infoTitleFont(font(), s));
+        p.setPen(TextColor);
+        p.drawText(QRectF(group.left(), group.top(), group.width(), InfoTitleHeight * s), Qt::AlignLeft | Qt::AlignVCenter,
+                   p.fontMetrics().elidedText(section.title, Qt::ElideRight, int(group.width())));
+
+        p.setFont(infoLineFont(font(), s));
+        const qreal label = layout.labelWidths[g] * s;
+        const qreal valueLeft = group.left() + label + ExifLabelGap * s;
+        qreal y = group.top() + (InfoTitleHeight + SettingsTitleGap) * s;
+        for (const auto &[name, text] : section.rows) {
+            const qreal rowHeight = ExifRowHeight * s;
+            p.setPen(DimTextColor);
+            p.drawText(QRectF(group.left(), y, label + 2, rowHeight), Qt::AlignLeft | Qt::AlignVCenter, name);
+            const QRectF value(valueLeft, y, group.right() - valueLeft, rowHeight);
+            p.setPen(TextColor);
+            p.drawText(value, Qt::AlignLeft | Qt::AlignVCenter, p.fontMetrics().elidedText(text, Qt::ElideRight, int(value.width())));
+            y += rowHeight;
+        }
+    }
+
+    // Done is the only control, so it is always the selected one
+    const qreal rule = layout.done.top() - SettingsDoneGap / 2 * s;
+    p.setPen(QPen(MenuSeparatorColor, 1));
+    p.drawLine(QPointF(layout.done.left(), rule), QPointF(layout.done.right(), rule));
+    p.setPen(QPen(MenuOutlineColor, 1));
+    p.setBrush(MenuHighlightColor);
+    p.drawRoundedRect(layout.done, 6 * s, 6 * s);
+    p.setFont(pixelFont(font(), qMax(1, qRound(24 * s)), QFont::DemiBold));
+    p.setPen(TextColor);
+    p.drawText(layout.done, Qt::AlignCenter, tr("Done"));
+
+    p.setFont(pixelFont(font(), qMax(1, qRound(15 * s))));
+    p.setPen(DimTextColor);
+    p.drawText(QRectF(layout.panel.left(), layout.panel.bottom() - SettingsFooterHeight * s, layout.panel.width(), SettingsFooterHeight * s),
+               Qt::AlignCenter, tr("← →  previous / next image   ·   E / Esc  close"));
+}
 
 // ------------------------------------------------------------- AboutOverlay
 

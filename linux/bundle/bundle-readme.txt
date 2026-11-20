@@ -40,6 +40,9 @@ don't install by themselves. If it doesn't start and prints
 
 Wayland sessions don't need it.
 
+Printing uses the system's CUPS (libcups), which desktops install along with
+their printer settings. Without it, Ctrl+P can still save the page as a PDF.
+
 Licences
 --------
 ZenViewer is under the MIT License (LICENSE.txt). The licences of Qt and the

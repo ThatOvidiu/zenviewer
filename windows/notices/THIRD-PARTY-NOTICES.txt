@@ -7,8 +7,9 @@ contains software by others, listed below with the licences it comes under.
 Qt
 --
 ZenViewer uses the Qt Toolkit, version 6.12.0 (Qt6Core.dll, Qt6Gui.dll,
-Qt6Widgets.dll, Qt6Svg.dll and the plugins in the platforms, styles,
-imageformats and iconengines folders, all in the dll folder).
+Qt6Widgets.dll, Qt6PrintSupport.dll, Qt6Svg.dll and the plugins in the
+platforms, styles, imageformats and iconengines folders, all in the dll
+folder).
 Copyright (C) The Qt Company Ltd. and other contributors.
 
 Qt is used under the GNU Lesser General Public License version 3
@@ -22,6 +23,14 @@ https://download.qt.io/official_releases/qt/6.12/6.12.0/submodules/ :
   qtsvg-everywhere-src-6.12.0.tar.xz
   qtimageformats-everywhere-src-6.12.0.tar.xz
 and from the same place you obtained this package.
+
+TinyEXIF
+--------
+ZenViewer reads EXIF details with TinyEXIF 1.2.1, built into zenviewer.exe.
+Copyright (c) 2015-2025 Seacave (cdcseacave); parts come from easyexif,
+Copyright (c) 2010-2015 Mayank Lahiri.
+Licence: MIT (licenses/TinyEXIF-LICENSE.txt); the parts from easyexif are also
+under the BSD-2-Clause licence (licenses/TinyEXIF-easyexif-LICENSE.txt).
 
 Libraries and code included in Qt
 ---------------------------------

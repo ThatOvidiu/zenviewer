@@ -1,15 +1,20 @@
 #pragma once
 
+#include "ImagePrinter.h"
 #include "OsdIcons.h"
 #include "TransitionOverlay.h"
 
 #include <QElapsedTimer>
 #include <QMainWindow>
 
+#include <functional>
+#include <memory>
+
 class AboutOverlay;
 class ConfirmOverlay;
 class ControlBar;
 class EmptyHint;
+class ExifOverlay;
 class ActionFlash;
 class Filmstrip;
 class HelpOverlay;
@@ -65,7 +70,20 @@ private:
     void toast(const QString &text, OsdIcon icon = OsdIcon::None, int durationMs = 1200);
     void setHelpVisible(bool visible);
     void setAboutVisible(bool visible);
+    void showExif();
+    void printCurrent();
+    void updateExif();
     void confirmQuit();
+    // The right-click menu: every command, with its key, as at the moment it opens
+    void showContextMenu(const QPoint &globalPos);
+    // The File menu: copy, move or delete the image and its raw file. Deleting from
+    // the menu asks first, rather than waiting for a second press.
+    static QString fileNames(const QStringList &files);
+    void confirmDelete(const QStringList &files);
+    void trashFiles(const QStringList &files);
+    void askTransfer(const QStringList &files, bool move);
+    void transferTo(const QString &folder);
+    void dropFromList(const QString &path);
 
     void loadFolder(const QString &dir, const QString &selectFile);
     void showIndex(int index);
@@ -109,6 +127,7 @@ private:
     ConfirmOverlay *m_confirm = nullptr;
     OpenOverlay *m_open = nullptr;
     SettingsOverlay *m_settings = nullptr;
+    ExifOverlay *m_exif = nullptr;
     LoadingSpinner *m_spinner = nullptr;
     ActionFlash *m_flash = nullptr;
     EmptyHint *m_emptyHint = nullptr;
@@ -138,6 +157,24 @@ private:
     QAction *m_pauseAct = nullptr;
     QAction *m_slideshowAct = nullptr;
     QAction *m_infoAct = nullptr;
+    QAction *m_exifAct = nullptr;
+    QAction *m_printAct = nullptr;
+    QAction *m_firstAct = nullptr;
+    QAction *m_lastAct = nullptr;
+    QAction *m_shorterAct = nullptr;
+    QAction *m_longerAct = nullptr;
+    QAction *m_settingsAct = nullptr;
+    QAction *m_iconBarAct = nullptr;
+    QAction *m_helpAct = nullptr;
+    QAction *m_quitAct = nullptr;
+    // What the confirmation's Yes does: quit, or move the image to the trash
+    std::function<void()> m_confirmYes;
+    // Waiting for the folder to copy or move them to
+    QStringList m_transferFiles;
+    bool m_transferMove = false;
+    // Where the last copy or move went; only for as long as the app runs
+    QString m_lastTransferFolder;
+    std::unique_ptr<ImagePrinter> m_printer;
     QAction *m_aboutAct = nullptr;
     QAction *m_filmstripAct = nullptr;
     QAction *m_loopAct = nullptr;
@@ -155,7 +192,7 @@ private:
     QElapsedTimer m_deleteArmed; // second Delete press within a few seconds confirms
 
     QTimer *m_slideTimer = nullptr;
-    TransitionOverlay::Effect m_effect = TransitionOverlay::Effect::Crossfade;
+    TransitionOverlay::Effect m_effect = TransitionOverlay::Effect::Random;
     int m_slideIntervalMs = 2000;
     bool m_slideshow = false;
     bool m_slideshowPaused = false;

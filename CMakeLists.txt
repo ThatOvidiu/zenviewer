@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.21)
 
-project(zenviewer VERSION 0.6.0 LANGUAGES CXX)
+project(zenviewer VERSION 0.7.0 LANGUAGES CXX)
 
 # Shown in the About panel and the Windows file properties
 set(ZENVIEWER_AUTHOR "Ovidiu Albu")
@@ -10,7 +10,7 @@ set(ZENVIEWER_COPYRIGHT_SINCE 2026)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-find_package(Qt6 6.4 REQUIRED COMPONENTS Widgets)
+find_package(Qt6 6.4 REQUIRED COMPONENTS Widgets PrintSupport)
 qt_standard_project_setup()
 
 qt_add_executable(zenviewer
@@ -19,13 +19,23 @@ qt_add_executable(zenviewer
     src/ImageView.h src/ImageView.cpp
     src/ImageLoader.h src/ImageLoader.cpp
     src/ImageOrientation.h src/ImageOrientation.cpp
+    src/ExifInfo.h src/ExifInfo.cpp
+    src/FileOps.h src/FileOps.cpp
+    src/ImagePrinter.h src/ImagePrinter.cpp
     src/Filmstrip.h src/Filmstrip.cpp
     src/TransitionOverlay.h src/TransitionOverlay.cpp
     src/OsdIcons.h src/OsdIcons.cpp
     src/OsdWidgets.h src/OsdWidgets.cpp
 )
 
-target_link_libraries(zenviewer PRIVATE Qt6::Widgets)
+target_link_libraries(zenviewer PRIVATE Qt6::Widgets Qt6::PrintSupport)
+
+# TinyEXIF reads the EXIF details (third_party/TinyEXIF/README.md). It is built
+# into the app, without its XMP parser, which would need tinyxml2.
+target_sources(zenviewer PRIVATE third_party/TinyEXIF/TinyEXIF.h third_party/TinyEXIF/TinyEXIF.cpp)
+target_include_directories(zenviewer PRIVATE third_party/TinyEXIF)
+target_compile_definitions(zenviewer PRIVATE TINYEXIF_NO_XMP_SUPPORT)
+
 # The version and the details above live only here; the code gets them from here
 target_compile_definitions(zenviewer PRIVATE
     ZENVIEWER_VERSION="${PROJECT_VERSION}"
@@ -33,14 +43,18 @@ target_compile_definitions(zenviewer PRIVATE
     ZENVIEWER_CONTACT="${ZENVIEWER_CONTACT}"
     ZENVIEWER_COPYRIGHT_SINCE="${ZENVIEWER_COPYRIGHT_SINCE}")
 
-# The app icon, for the window and the About panel (src/icons/make-icons.sh makes it)
+# The app icon, for the window and the About panel (src/icons/make-icons.sh makes it),
+# and the open dialog's drop-down arrow
 qt_add_resources(zenviewer "icons" PREFIX "/" BASE src FILES
     src/icons/zenviewer-16.png src/icons/zenviewer-24.png src/icons/zenviewer-32.png
     src/icons/zenviewer-48.png src/icons/zenviewer-64.png src/icons/zenviewer-128.png
-    src/icons/zenviewer-256.png)
+    src/icons/zenviewer-256.png
+    src/icons/down-arrow.svg)
 
 if(NOT MSVC)
     target_compile_options(zenviewer PRIVATE -Wall -Wextra -Wpedantic)
+    # Someone else's code: its warnings are theirs to fix
+    set_source_files_properties(third_party/TinyEXIF/TinyEXIF.cpp PROPERTIES COMPILE_OPTIONS -w)
 endif()
 
 option(ZENVIEWER_LTO "Link-time optimization in optimized builds" ON)

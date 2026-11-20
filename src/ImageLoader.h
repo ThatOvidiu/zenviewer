@@ -15,6 +15,10 @@
 // system (PDF, HEIC, ...); those stay out, so all systems behave the same.
 const QList<QByteArray> &imageFormats();
 
+// Decodes path right away, on the calling thread, EXIF orientation applied. The image
+// fits inside box (in pixels); an invalid box means full size. Null on failure.
+QImage decodeImage(const QString &path, const QSize &box = {}, QString *error = nullptr);
+
 class ImageLoader : public QObject
 {
     Q_OBJECT

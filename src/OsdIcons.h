@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QColor>
+#include <QIcon>
 
 class QPainter;
 class QPointF;
@@ -29,12 +30,17 @@ enum class OsdIcon {
     Filmstrip,
     Settings,
     Help,
+    Camera, // EXIF details
+    Print,
     More, // three dots: About
     Keyboard,
     Mouse,
 };
 
 void drawOsdIcon(QPainter &painter, OsdIcon icon, const QRectF &rect, const QColor &color);
+
+// The icon in white, greyed out when disabled, for menus
+QIcon osdIconSet(OsdIcon icon);
 
 // "Still loading" circle. Turns with the clock, so callers only need to keep repainting.
 void drawLoadingSpinner(QPainter &painter, const QPointF &center, qreal radius);
