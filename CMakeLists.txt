@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.21)
 
-project(zenviewer VERSION 0.6.0 LANGUAGES CXX)
+project(zenviewer VERSION 0.7.0 LANGUAGES CXX)
 
 # Shown in the About panel and the Windows file properties
 set(ZENVIEWER_AUTHOR "Ovidiu Albu")
